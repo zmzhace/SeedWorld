@@ -10,5 +10,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['@testing-library/jest-dom/vitest'],
+    exclude: ['tests/e2e/**', 'node_modules/**', '.claude/**'],
   },
 })

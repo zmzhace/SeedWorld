@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react'
 import { ChatShell } from '@/components/chat/chat-shell'
 import { PanelShell } from '@/components/panel/panel-shell'
