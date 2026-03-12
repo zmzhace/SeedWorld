@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { POST } from '../../app/api/observations/route'
+import { createInitialWorldSlice } from '@/domain/world'
+import { createPersonalAgent } from '@/domain/agents'
 
-vi.mock('@/server/llm/anthropic', () => ({
-  summarizeObservation: vi.fn(async () => 'summary text'),
+vi.mock('@/server/llm/observation-generator', () => ({
+  generateObservationSummary: vi.fn(async () => 'summary text'),
 }))
 
 it('returns observation summary', async () => {
+  const world = createInitialWorldSlice()
+  const agent = createPersonalAgent('test-agent')
+  
   const req = new Request('http://localhost/api/observations', {
     method: 'POST',
-    body: JSON.stringify({ prompt: 'observe', world: { tick: 1 } }),
+    body: JSON.stringify({ world, agent }),
   })
   const res = await POST(req)
   const json = await res.json()
