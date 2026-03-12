@@ -7,10 +7,12 @@ import { mapSearchResultsToSocialContext } from '@/server/search/mapper'
 import type { AgentAction } from '@/domain/actions'
 import type { WorldSlice } from '@/domain/world'
 import type { SearchSignal } from '@/domain/search'
+import { arbitratePatches } from './arbiter'
 
 type OrchestratorOptions = {
   search?: () => Promise<SearchSignal[]>
   nuwa?: { trigger: 'event'; seed: string; environment: { region: string; social_state: string } }
+  panguRegistry?: { runAll: (world: WorldSlice) => Promise<{ agentId: string; patch?: unknown; error?: string }[]> }
 }
 
 export async function runWorldTick(world: WorldSlice, options: OrchestratorOptions = {}): Promise<WorldSlice> {
@@ -54,7 +56,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
 
   events.push(event)
 
-  const next: WorldSlice = {
+  const baseNext: WorldSlice = {
     ...world,
     tick: nextTick,
     time: timestamp,
@@ -71,6 +73,20 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
         action_history: [...world.agents.personal.action_history, { type: action.type, timestamp }],
       },
     },
+  }
+
+  if (!options.panguRegistry) {
+    await bus.emit('after_tick', { world: baseNext })
+    return baseNext
+  }
+
+  const results = await options.panguRegistry.runAll(world)
+  const patch = arbitratePatches(results as { agentId: string; patch?: any; error?: string }[])
+
+  const next: WorldSlice = {
+    ...baseNext,
+    tick: baseNext.tick + patch.timeDelta,
+    events: [...baseNext.events, ...patch.events],
   }
 
   await bus.emit('after_tick', { world: next })

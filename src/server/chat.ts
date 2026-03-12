@@ -1,6 +1,7 @@
 import { createInitialWorldSlice } from '@/domain/world'
 import { runWorldTick } from '@/engine/orchestrator'
 import { loadWorldSlice, saveWorldSlice } from './persistence'
+import { getPanguRegistry } from './pangu'
 
 type ChatTurnInput = {
   message: string
@@ -16,18 +17,21 @@ export async function handleChatTurn(input: ChatTurnInput): Promise<ChatTurnResu
   const existing = await loadWorldSlice()
   const world = existing ?? createInitialWorldSlice()
 
-  const next = await runWorldTick({
-    ...world,
-    events: [
-      ...world.events,
-      {
-        id: `user-${world.tick + 1}`,
-        type: 'user_message',
-        timestamp: new Date().toISOString(),
-        payload: { message: input.message },
-      },
-    ],
-  })
+  const next = await runWorldTick(
+    {
+      ...world,
+      events: [
+        ...world.events,
+        {
+          id: `user-${world.tick + 1}`,
+          type: 'user_message',
+          timestamp: new Date().toISOString(),
+          payload: { message: input.message },
+        },
+      ],
+    },
+    { panguRegistry: getPanguRegistry() },
+  )
 
   await saveWorldSlice(next)
 
