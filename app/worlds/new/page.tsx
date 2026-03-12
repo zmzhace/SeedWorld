@@ -13,12 +13,15 @@ export default function NewWorldPage() {
     e.preventDefault()
     if (!prompt.trim()) return
 
+    console.log('Creating world with prompt:', prompt)
     setCreating(true)
     try {
       const world = createWorld({ worldPrompt: prompt })
+      console.log('World created:', world)
       router.push(`/worlds/${world.id}`)
     } catch (error) {
       console.error('Failed to create world:', error)
+      alert('Failed to create world: ' + (error as Error).message)
       setCreating(false)
     }
   }

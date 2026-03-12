@@ -26,11 +26,13 @@ export default function WorldsPage() {
       ) : (
         <ul className="mt-8 space-y-4">
           {worlds.map((world) => (
-            <li key={world.id} className="rounded border p-4">
-              <div className="text-base font-semibold">{world.worldPrompt}</div>
-              <div className="mt-2 text-sm text-slate-600">
-                Created <time dateTime={world.createdAt}>{world.createdAt}</time>
-              </div>
+            <li key={world.id} className="rounded border p-4 hover:border-slate-400 transition-colors">
+              <Link href={`/worlds/${world.id}`} className="block">
+                <div className="text-base font-semibold">{world.worldPrompt}</div>
+                <div className="mt-2 text-sm text-slate-600">
+                  Created <time dateTime={world.createdAt}>{world.createdAt}</time>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>

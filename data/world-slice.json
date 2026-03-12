@@ -1,0 +1,64 @@
+{
+  "world_id": "world-1",
+  "tick": 0,
+  "time": "1970-01-01T00:00:00.000Z",
+  "environment": {
+    "description": "calm"
+  },
+  "social_context": {
+    "macro_events": [],
+    "narratives": [],
+    "pressures": [],
+    "institutions": [],
+    "ambient_noise": []
+  },
+  "agents": {
+    "pangu": {
+      "kind": "world",
+      "id": "pangu-1"
+    },
+    "nuwa": {
+      "kind": "persona",
+      "id": "nuwa-1"
+    },
+    "personal": {
+      "kind": "personal",
+      "genetics": {
+        "seed": "default-user"
+      },
+      "identity": {
+        "name": "user"
+      },
+      "memory_short": [],
+      "memory_long": [],
+      "vitals": {
+        "energy": 0.7,
+        "stress": 0.2,
+        "sleep_debt": 0.1,
+        "focus": 0.6,
+        "aging_index": 0.1
+      },
+      "emotion": {
+        "label": "neutral",
+        "intensity": 0.2
+      },
+      "persona": {
+        "openness": 0.5,
+        "stability": 0.5,
+        "attachment": 0.5,
+        "agency": 0.5,
+        "empathy": 0.5
+      },
+      "goals": [],
+      "relations": {},
+      "action_history": []
+    },
+    "social": {
+      "kind": "social",
+      "id": "social-1"
+    }
+  },
+  "events": [],
+  "relations": {},
+  "active_hooks": []
+}

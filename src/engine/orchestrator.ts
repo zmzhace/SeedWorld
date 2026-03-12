@@ -42,7 +42,12 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   if (options.nuwa) {
     const nuwa = createNuwaService({
       emit: (event) => {
-        events.push({ type: event.type, payload: event.payload })
+        events.push({
+          id: `event-${nextTick}-${events.length}`,
+          type: event.type,
+          timestamp,
+          payload: event.payload as Record<string, unknown> | undefined,
+        })
       },
     })
     nuwa.createAgent(options.nuwa)
@@ -86,7 +91,15 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   const next: WorldSlice = {
     ...baseNext,
     tick: baseNext.tick + patch.timeDelta,
-    events: [...baseNext.events, ...patch.events],
+    events: [
+      ...baseNext.events,
+      ...patch.events.map((e) => ({
+        id: e.id,
+        type: e.kind,
+        timestamp,
+        payload: { summary: e.summary, conflict: e.conflict },
+      })),
+    ],
   }
 
   await bus.emit('after_tick', { world: next })

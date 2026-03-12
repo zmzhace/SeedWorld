@@ -70,9 +70,11 @@ Return as JSON array with this structure:
   // Handle both standard and streaming responses
   let responseText = ''
   
-  if (typeof response === 'string') {
+  // Parse SSE format or standard format
+  const responseAny = response as any
+  if (typeof responseAny === 'string') {
     // Parse SSE format
-    const lines = response.split('\n')
+    const lines = responseAny.split('\n')
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         try {
@@ -85,9 +87,9 @@ Return as JSON array with this structure:
         }
       }
     }
-  } else if (response.content && response.content[0]) {
+  } else if (responseAny.content && responseAny.content[0]) {
     // Standard Anthropic format
-    const content = response.content[0]
+    const content = responseAny.content[0]
     if (content.type === 'text') {
       responseText = content.text
     }

@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.gitignore
+.env.local
+.env
+README.md
+DEPLOYMENT_GUIDE.md
+DEPLOYMENT_READY.md
+READY_FOR_TESTING.md
+test-api.js
+test-api-full.js
+*.log
+.DS_Store
+coverage
+playwright-report
+test-results
