@@ -38,10 +38,19 @@ All core features have been implemented and tested. The application is ready for
 
 ### 1. Setup Environment
 
-Create `.env.local` in the project root:
+Copy `.env.example` to `.env.local`:
+```bash
+cp .env.example .env.local
 ```
-ANTHROPIC_API_KEY=your_api_key_here
+
+Then edit `.env.local` and add your API credentials:
 ```
+ANTHROPIC_BASE_URL=http://www.testnewnew.top
+ANTHROPIC_AUTH_TOKEN=your_auth_token_here
+ANTHROPIC_MODEL=gpt-5.2-codex
+```
+
+**Note**: `.env.local` is gitignored and will not be committed.
 
 ### 2. Start Development Server
 
@@ -162,8 +171,10 @@ All changes have been committed:
 ## Troubleshooting
 
 ### API Key Issues
-- Ensure `.env.local` exists in project root
-- Verify `ANTHROPIC_API_KEY` is set correctly
+- Ensure `.env.local` exists in project root (copy from `.env.example`)
+- Verify `ANTHROPIC_AUTH_TOKEN` is set correctly
+- Verify `ANTHROPIC_BASE_URL` is set correctly
+- Verify `ANTHROPIC_MODEL` is set correctly
 - Restart dev server after adding env vars
 
 ### Generation Fails

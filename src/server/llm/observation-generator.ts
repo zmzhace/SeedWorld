@@ -12,8 +12,11 @@ export async function generateObservationSummary(
   const { world, agent } = options
 
   const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY || '',
+    apiKey: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || '',
+    baseURL: process.env.ANTHROPIC_BASE_URL,
   })
+
+  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
 
   // Get recent memories
   const recentMemories = [...agent.memory_short, ...agent.memory_long]
@@ -72,7 +75,7 @@ Generate a natural language observation summary covering:
 Write in first person from the agent's perspective. Be concise but comprehensive (3-5 sentences).`
 
   const response = await client.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+    model,
     max_tokens: 1024,
     messages: [
       {

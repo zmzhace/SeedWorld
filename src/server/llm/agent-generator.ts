@@ -32,8 +32,11 @@ export async function generatePersonalAgents(
   const { prompt, count } = options
 
   const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY || '',
+    apiKey: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || '',
+    baseURL: process.env.ANTHROPIC_BASE_URL,
   })
+
+  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
 
   const systemPrompt = `Generate ${count} distinct personal agents based on this description: "${prompt}"
 
@@ -54,7 +57,7 @@ Return as JSON array with this structure:
 ]`
 
   const response = await client.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+    model,
     max_tokens: 2048,
     messages: [
       {
