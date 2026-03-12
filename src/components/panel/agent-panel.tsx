@@ -1,5 +1,6 @@
 import React from 'react'
 import type { WorldSlice, PersonalAgentState } from '@/domain/world'
+import { WorldSnapshot } from './world-snapshot'
 
 type AgentPanelProps = {
   world: WorldSlice
@@ -146,14 +147,7 @@ export function AgentPanel({ world }: AgentPanelProps) {
         </div>
       </div>
 
-      <details className="rounded border p-3 text-sm text-slate-600">
-        <summary className="cursor-pointer font-medium">World Snapshot</summary>
-        <div className="mt-2 space-y-1">
-          <div>Tick: {world.tick}</div>
-          <div>Time: {world.time}</div>
-          <div>World ID: {world.world_id}</div>
-        </div>
-      </details>
+      <WorldSnapshot world={world} />
     </section>
   )
 }
