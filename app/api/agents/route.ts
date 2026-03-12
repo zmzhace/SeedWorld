@@ -1,36 +1,20 @@
 import { NextResponse } from 'next/server'
-import { createNuwaConfig } from '@/domain/nuwa'
-import { registerPanguAgent } from '@/server/pangu'
-import { summarizeObservation } from '@/server/llm/anthropic'
+import { generatePersonalAgents } from '@/server/llm/agent-generator'
 
 export async function POST(request: Request) {
-  const body = await request.json()
-  const prompt = String(body?.prompt ?? '')
+  try {
+    const body = await request.json()
+    const prompt = String(body?.prompt ?? '')
+    const count = Number(body?.count ?? 3)
 
-  const summary = await summarizeObservation({ prompt, world: {} })
-  const names = summary
-    .split(/[,;\n]+/)
-    .map((name) => name.trim())
-    .filter(Boolean)
+    const agents = await generatePersonalAgents({ prompt, count })
 
-  const agents = names.map((name, index) =>
-    createNuwaConfig({
-      race: 'coastal',
-      gender: index % 2 === 0 ? 'female' : 'male',
-      goals: ['survival'],
-      genetics: { seed: name },
-      environment_signature: { region: 'coastal', social_state: 'neutral' },
-      traits: { openness: 0.5, stability: 0.5, attachment: 0.5, agency: 0.5, empathy: 0.5 },
-    }),
-  )
-
-  for (const agent of agents) {
-    registerPanguAgent({
-      id: agent.genetics.seed as string,
-      role: 'other',
-      run: async () => ({ events: [] }),
-    })
+    return NextResponse.json({ success: true, agents })
+  } catch (error) {
+    console.error('Agent generation error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to generate agents' },
+      { status: 500 }
+    )
   }
-
-  return NextResponse.json({ agents })
 }
