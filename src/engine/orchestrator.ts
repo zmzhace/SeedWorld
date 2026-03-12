@@ -1,4 +1,5 @@
 import { createHookBus } from './hooks'
+import { createNuwaService } from './nuwa-service'
 import { applyMemoryDecay } from './memory'
 import { updateVitalsAfterTick } from './vitals'
 import { applyPersonaDrift } from './persona'
@@ -9,6 +10,7 @@ import type { SearchSignal } from '@/domain/search'
 
 type OrchestratorOptions = {
   search?: () => Promise<SearchSignal[]>
+  nuwa?: { trigger: 'event'; seed: string; environment: { region: string; social_state: string } }
 }
 
 export async function runWorldTick(world: WorldSlice, options: OrchestratorOptions = {}): Promise<WorldSlice> {
@@ -33,18 +35,31 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   await bus.emit('before_action', { action })
   await bus.emit('after_action', { action })
 
+  const events = [...world.events]
+
+  if (options.nuwa) {
+    const nuwa = createNuwaService({
+      emit: (event) => {
+        events.push({ type: event.type, payload: event.payload })
+      },
+    })
+    nuwa.createAgent(options.nuwa)
+  }
+
   const event = {
     id: `event-${nextTick}`,
     type: 'tick',
     timestamp,
   }
 
+  events.push(event)
+
   const next: WorldSlice = {
     ...world,
     tick: nextTick,
     time: timestamp,
     social_context: mappedContext,
-    events: [...world.events, event],
+    events,
     agents: {
       ...world.agents,
       personal: {
