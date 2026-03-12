@@ -29,6 +29,20 @@ ANTHROPIC_AUTH_TOKEN=sk-baa032942cb94f0eeb2f7e03c2cee8b762709a4d6d134ad3fd740f6e
 ANTHROPIC_MODEL=gpt-5.2-codex
 ```
 
+### ✅ API 测试结果
+
+API 连接已测试通过：
+- ✅ 基础连接正常
+- ✅ 智能体生成功能正常
+- ✅ SSE 流式响应解析正常
+- ✅ 模型 gpt-5.2-codex 工作正常
+
+测试命令：
+```bash
+node test-api.js        # 基础连接测试
+node test-api-full.js   # 完整功能测试
+```
+
 ### 文件说明
 
 - `.env.example` - 环境变量模板（已提交到 git）
