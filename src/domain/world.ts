@@ -37,6 +37,9 @@ export type SocialContext = {
 
 export type PersonalAgentState = {
   kind: 'personal'
+  genetics: {
+    seed: string
+  }
   identity: {
     name: string
   }
@@ -90,6 +93,7 @@ export function createInitialWorldSlice(): WorldSlice {
       nuwa: { kind: 'persona', id: 'nuwa-1' },
       personal: {
         kind: 'personal',
+        genetics: { seed: 'default-user' },
         identity: { name: 'user' },
         memory_short: [],
         memory_long: [],

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPatch, type AgentPatch } from './agents'
+import { createPatch, type AgentPatch, createPersonalAgent } from './agents'
 
 describe('createPatch', () => {
   it('returns a structured patch with defaults', () => {
@@ -12,5 +12,19 @@ describe('createPatch', () => {
     expect(patch.events?.length).toBe(1)
     expect(patch.rulesDelta).toEqual([])
     expect(patch.notes).toEqual([])
+  })
+})
+
+describe('createPersonalAgent', () => {
+  it('creates a personal agent with unique seed and default state', () => {
+    const agent = createPersonalAgent('curious-explorer')
+    
+    expect(agent.genetics.seed).toBe('curious-explorer')
+    expect(agent.kind).toBe('personal')
+    expect(agent.memory_short).toEqual([])
+    expect(agent.memory_long).toEqual([])
+    expect(agent.vitals).toBeDefined()
+    expect(agent.persona).toBeDefined()
+    expect(agent.action_history).toEqual([])
   })
 })
