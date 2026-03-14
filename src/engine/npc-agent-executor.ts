@@ -88,10 +88,126 @@ function makeAgentDecision(agent: PersonalAgentState, world: WorldSlice): AgentD
 }
 
 /**
- * 将 agent 决策转换为世界补丁
+ * 将 agent 决策转换为世界补丁，并更新 agent 状态
  */
-function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, world: WorldSlice): AgentPatch {
+function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, world: WorldSlice): { patch: AgentPatch; updatedAgent: PersonalAgentState } {
   const { action } = decision
+  
+  // 复制 agent 状态
+  const updatedAgent = { ...agent }
+  
+  // 根据行动类型更新 agent 状态
+  switch (action.type) {
+    case 'rest':
+      // 休息恢复能量，降低压力
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.min(1, updatedAgent.vitals.energy + 0.2 * action.intensity),
+        stress: Math.max(0, updatedAgent.vitals.stress - 0.15 * action.intensity),
+        sleep_debt: Math.max(0, updatedAgent.vitals.sleep_debt - 0.1),
+      }
+      updatedAgent.emotion = {
+        label: '放松',
+        intensity: 0.3,
+      }
+      break
+      
+    case 'relax':
+      // 放松降低压力
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        stress: Math.max(0, updatedAgent.vitals.stress - 0.2 * action.intensity),
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.05),
+      }
+      updatedAgent.emotion = {
+        label: '平静',
+        intensity: 0.4,
+      }
+      break
+      
+    case 'pursue_goal':
+      // 追求目标消耗能量，增加压力，但提升专注
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.15 * action.intensity),
+        stress: Math.min(1, updatedAgent.vitals.stress + 0.1 * action.intensity),
+        focus: Math.min(1, updatedAgent.vitals.focus + 0.1),
+      }
+      updatedAgent.emotion = {
+        label: '专注',
+        intensity: action.intensity,
+      }
+      // 有概率完成目标
+      if (Math.random() < 0.1 * action.intensity) {
+        updatedAgent.goals = updatedAgent.goals.slice(1) // 移除第一个目标
+        if (updatedAgent.success_metrics) {
+          updatedAgent.success_metrics.power = (updatedAgent.success_metrics.power || 0) + 1
+        }
+      }
+      break
+      
+    case 'socialize':
+      // 社交降低压力，消耗少量能量，建立关系
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.08),
+        stress: Math.max(0, updatedAgent.vitals.stress - 0.1),
+      }
+      updatedAgent.emotion = {
+        label: '愉快',
+        intensity: 0.6,
+      }
+      // 建立或增强关系
+      if (action.target) {
+        updatedAgent.relations = {
+          ...updatedAgent.relations,
+          [action.target]: Math.min(1, (updatedAgent.relations[action.target] || 0) + 0.1),
+        }
+        if (updatedAgent.success_metrics) {
+          updatedAgent.success_metrics.reputation = (updatedAgent.success_metrics.reputation || 0) + 1
+        }
+      }
+      break
+      
+    case 'react_to_pressure':
+      // 对压力做出反应，增加压力和情绪强度
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        stress: Math.min(1, updatedAgent.vitals.stress + 0.15 * action.intensity),
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.1),
+      }
+      updatedAgent.emotion = {
+        label: '焦虑',
+        intensity: action.intensity,
+      }
+      break
+      
+    case 'explore':
+      // 探索消耗能量，增加知识
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.1),
+        focus: Math.min(1, updatedAgent.vitals.focus + 0.05),
+      }
+      updatedAgent.emotion = {
+        label: '好奇',
+        intensity: action.intensity,
+      }
+      if (updatedAgent.success_metrics) {
+        updatedAgent.success_metrics.knowledge = (updatedAgent.success_metrics.knowledge || 0) + 1
+      }
+      break
+      
+    default:
+      // 默认：轻微消耗能量
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.05),
+      }
+  }
+  
+  // 所有行动都会轻微增加衰老
+  updatedAgent.vitals.aging_index = Math.min(1, updatedAgent.vitals.aging_index + 0.001)
   
   // 生成事件
   const event = {
@@ -101,7 +217,7 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
     conflict: false,
   }
   
-  return {
+  const patch: AgentPatch = {
     timeDelta: 0,
     events: [event],
     rulesDelta: [],
@@ -112,6 +228,8 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
       intensity: action.intensity,
     },
   }
+  
+  return { patch, updatedAgent }
 }
 
 /**
@@ -119,7 +237,7 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
  */
 export async function executeNpcAgents(
   world: WorldSlice
-): Promise<Array<{ agentId: string; patch: AgentPatch }>> {
+): Promise<Array<{ agentId: string; patch: AgentPatch; updatedAgent: PersonalAgentState }>> {
   const { npcs } = world.agents
   
   if (npcs.length === 0) {
@@ -141,17 +259,18 @@ export async function executeNpcAgents(
   // 过滤掉失败的决策
   const validDecisions = decisions.filter((d): d is AgentDecision => d !== null)
   
-  // 并行将决策转换为补丁
+  // 并行将决策转换为补丁和更新的 agent
   const results = await Promise.all(
     validDecisions.map(async (decision) => {
       const agent = npcs.find(a => a.genetics.seed === decision.agentId)
       if (!agent) return null
       
       try {
-        const patch = decisionToPatch(decision, agent, world)
+        const { patch, updatedAgent } = decisionToPatch(decision, agent, world)
         return {
           agentId: decision.agentId,
           patch,
+          updatedAgent,
         }
       } catch (error) {
         console.error(`Failed to create patch for agent ${agent.identity.name}:`, error)
@@ -161,5 +280,5 @@ export async function executeNpcAgents(
   )
   
   // 过滤掉失败的结果
-  return results.filter((r): r is { agentId: string; patch: AgentPatch } => r !== null)
+  return results.filter((r): r is { agentId: string; patch: AgentPatch; updatedAgent: PersonalAgentState } => r !== null)
 }

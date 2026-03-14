@@ -115,9 +115,19 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
 
   const patch = arbitratePatches(allResults as { agentId: string; patch?: any; error?: string }[])
 
+  // 应用 NPC agents 的状态更新
+  const updatedNpcsMap = new Map(npcResults.map(r => [r.agentId, r.updatedAgent]))
+  const finalNpcs = baseNext.agents.npcs.map(agent => 
+    updatedNpcsMap.get(agent.genetics.seed) || agent
+  )
+
   let next: WorldSlice = {
     ...baseNext,
     tick: baseNext.tick + patch.timeDelta,
+    agents: {
+      ...baseNext.agents,
+      npcs: finalNpcs,
+    },
     events: [
       ...baseNext.events,
       ...patch.events.map((e) => ({
