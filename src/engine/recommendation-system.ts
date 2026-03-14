@@ -3,7 +3,10 @@
  * 参考 OASIS 的 RecSys 设计
  */
 
-import type { PersonalAgentState, WorldSlice, WorldEvent } from '@/domain/world'
+import type { PersonalAgentState, WorldSlice } from '@/domain/world'
+
+// 定义事件类型
+type WorldEvent = WorldSlice['events'][number]
 
 export type RecommendationConfig = {
   topK: number  // 推荐数量
@@ -194,9 +197,13 @@ export class RecommendationSystem {
    * 参考 Reddit 的热度算法
    */
   private calculateHotScore(event: WorldEvent, currentTick: number): number {
+    // 事件没有 tick 字段，使用 timestamp 计算时间差
+    const eventTime = new Date(event.timestamp).getTime()
+    const currentTime = Date.now()
+    const hoursSinceEvent = (currentTime - eventTime) / (1000 * 60 * 60)
+    
     // 时间衰减：越新的事件分数越高
-    const ticksSinceEvent = currentTick - (event.tick || currentTick)
-    const recency = Math.log10(Math.max(1, 271.8 - ticksSinceEvent / 100))
+    const recency = Math.log10(Math.max(1, 271.8 - hoursSinceEvent))
 
     // 事件重要性
     const importance = this.getEventImportance(event.type)

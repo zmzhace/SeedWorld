@@ -120,6 +120,8 @@ export function createInitialWorldSlice(): WorldSlice {
       nuwa: { kind: 'persona', id: 'nuwa-1' },
       personal: {
         kind: 'personal',
+        role: 'protagonist',
+        life_status: 'alive',
         genetics: { seed: 'default-user' },
         identity: { name: 'user' },
         memory_short: [],

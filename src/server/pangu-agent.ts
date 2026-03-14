@@ -28,7 +28,7 @@ export const panguDirectorAgent: PanguAgent = {
     // 生成故事线事件
     const patch = await generateStorylineEvent(worldSlice)
     
-    console.log(`[Pangu Director] Generated event:`, patch.events[0]?.summary || 'none')
+    console.log(`[Pangu Director] Generated event:`, patch.events?.[0]?.summary || 'none')
     
     return patch
   },

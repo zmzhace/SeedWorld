@@ -106,7 +106,7 @@ ${agentList}
     let responseText = ''
     
     if (typeof response === 'string') {
-      const lines = response.split('\n')
+      const lines = (response as string).split('\n')
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {

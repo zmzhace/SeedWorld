@@ -11,8 +11,18 @@ type SystemStatsPanelProps = {
 
 export function SystemStatsPanel({ world }: SystemStatsPanelProps) {
   const [stats, setStats] = React.useState<{
-    timeEngine: ReturnType<typeof createTimeEngine>['getActivityStats']
-    knowledgeGraph: ReturnType<typeof createKnowledgeGraph>['getStats']
+    timeEngine: {
+      total: number
+      active: number
+      sleeping: number
+      activityRate: number
+    }
+    knowledgeGraph: {
+      totalNodes: number
+      totalEdges: number
+      nodesByType: Record<string, number>
+      avgDegree: number
+    }
   } | null>(null)
 
   React.useEffect(() => {

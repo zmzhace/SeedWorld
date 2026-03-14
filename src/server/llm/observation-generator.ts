@@ -33,12 +33,18 @@ export async function generateObservationSummary(
   // Get other agents (excluding this one)
   const otherAgents = Object.entries(world.agents)
     .filter(([key, a]) => {
-      if (a.kind === 'personal') {
-        return a.genetics.seed !== agent.genetics.seed
+      if (key === 'npcs') return false // Skip npcs array
+      if (typeof a === 'object' && a !== null && 'kind' in a && a.kind === 'personal') {
+        return (a as PersonalAgentState).genetics.seed !== agent.genetics.seed
       }
       return true
     })
-    .map(([key, a]) => `- ${key}: ${a.kind}`)
+    .map(([key, a]) => {
+      if (typeof a === 'object' && a !== null && 'kind' in a) {
+        return `- ${key}: ${(a as { kind: string }).kind}`
+      }
+      return `- ${key}: unknown`
+    })
     .join('\n')
 
   const prompt = `You are observing the world through the perspective of agent "${agent.genetics.seed}".

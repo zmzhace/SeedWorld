@@ -106,7 +106,7 @@ export async function generatePersonalAgents(
   // Parse SSE format or standard format
   if (typeof response === 'string') {
     // Parse SSE format
-    const lines = response.split('\n')
+    const lines = (response as string).split('\n')
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         try {
