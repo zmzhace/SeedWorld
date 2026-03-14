@@ -1,3 +1,5 @@
+import type { PlotArc } from './siming'
+
 export type AgentKind = 'world' | 'persona' | 'personal' | 'social'
 
 export type MemoryRecord = {
@@ -37,6 +39,7 @@ export type SocialContext = {
 
 export type PersonalAgentState = {
   kind: 'personal'
+  role: 'protagonist' | 'supporting' | 'npc'  // 主要人物、支线人物、NPC
   genetics: {
     seed: string
   }
@@ -54,6 +57,20 @@ export type PersonalAgentState = {
   goals: string[]
   relations: Record<string, number>
   action_history: Array<{ type: string; timestamp: string }>
+  
+  // 后土相关 - 生死轮回
+  life_status: 'alive' | 'dying' | 'dead' | 'reincarnating'
+  death_tick?: number  // 死亡时的 tick
+  cause_of_death?: string
+  legacy?: string[]  // 遗产/影响
+  
+  // Agent 个性化系统 - 受 agency-agents 启发，由 LLM 动态生成
+  occupation?: string  // 职业（由 LLM 根据世界背景生成）
+  voice?: string  // 说话风格
+  approach?: string  // 做事方式
+  expertise?: string[]  // 专长领域
+  core_belief?: string  // 核心信念
+  success_metrics?: Record<string, number>  // 成功指标追踪（如：财富、声望、知识等）
 }
 
 export type WorldSlice = {
@@ -71,6 +88,7 @@ export type WorldSlice = {
     social: { kind: 'social'; id: string }
     npcs: PersonalAgentState[]  // 女娲生成的NPC agents
   }
+  plots: PlotArc[]  // 司命编织的剧情
   events: Array<{ id: string; type: string; timestamp: string; payload?: Record<string, unknown> }>
   relations: Record<string, number>
   active_hooks: string[]
@@ -120,6 +138,7 @@ export function createInitialWorldSlice(): WorldSlice {
       social: { kind: 'social', id: 'social-1' },
       npcs: [],  // 女娲生成的NPC agents
     },
+    plots: [],  // 司命编织的剧情
     events: [],
     relations: {},
     active_hooks: [],

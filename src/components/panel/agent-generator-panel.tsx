@@ -87,12 +87,16 @@ export function AgentGeneratorPanel({ worldId, world, onWorldUpdate }: AgentGene
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">女娲造人</h2>
       <p className="text-sm text-slate-600">
-        描述你想要创建的人物，女娲将根据世界背景生成符合设定的 agent。这些 agent 会自主行动，推动世界发展。
+        女娲与司命协同工作。世界初始化时会自动创造 agents 和编织剧情。你也可以手动添加更多 agents。
       </p>
 
       <div className="rounded-lg border bg-blue-50 p-3 text-sm">
         <p className="font-medium text-blue-900">当前世界中的 Agents: {world.agents.npcs.length}</p>
-        <p className="mt-1 text-blue-700">建议生成 3-5 个核心 agent 来推动主要剧情</p>
+        {world.agents.npcs.length === 0 ? (
+          <p className="mt-1 text-blue-700">世界初始化时会自动生成 3-5 个核心 agents</p>
+        ) : (
+          <p className="mt-1 text-blue-700">可以继续添加更多 agents 来丰富世界</p>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -141,7 +145,61 @@ export function AgentGeneratorPanel({ worldId, world, onWorldUpdate }: AgentGene
           <h3 className="text-lg font-semibold">世界中的 Agents ({world.agents.npcs.length})</h3>
           {world.agents.npcs.map((agent, index) => (
             <div key={index} className="rounded-lg border p-4">
-              <h4 className="mb-2 font-semibold">{agent.identity.name}</h4>
+              <div className="mb-2 flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold">{agent.identity.name}</h4>
+                  {agent.occupation && (
+                    <p className="text-xs text-slate-600">{agent.occupation}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <span className={`rounded px-2 py-1 text-xs font-medium ${
+                    agent.role === 'protagonist' ? 'bg-yellow-100 text-yellow-800' :
+                    agent.role === 'supporting' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {agent.role === 'protagonist' ? '主角' : agent.role === 'supporting' ? '配角' : 'NPC'}
+                  </span>
+                  <span className={`inline-flex items-center rounded px-2 py-1 text-xs font-medium ${
+                    agent.life_status === 'alive' ? 'bg-green-100 text-green-800' :
+                    agent.life_status === 'dead' ? 'bg-gray-100 text-gray-800' :
+                    'bg-purple-100 text-purple-800'
+                  }`}>
+                    {agent.life_status === 'alive' ? '🌱 在世' : 
+                     agent.life_status === 'dead' ? '🪦 已故' : 
+                     '🔄 轮回中'}
+                  </span>
+                </div>
+              </div>
+              
+              {/* 个性化信息 */}
+              {(agent.voice || agent.approach || agent.core_belief) && (
+                <div className="mb-3 space-y-1 rounded bg-slate-50 p-2 text-xs">
+                  {agent.voice && (
+                    <div><span className="font-medium">说话风格：</span>{agent.voice}</div>
+                  )}
+                  {agent.approach && (
+                    <div><span className="font-medium">做事方式：</span>{agent.approach}</div>
+                  )}
+                  {agent.core_belief && (
+                    <div><span className="font-medium">核心信念：</span>{agent.core_belief}</div>
+                  )}
+                </div>
+              )}
+              
+              {/* 专长领域 */}
+              {agent.expertise && agent.expertise.length > 0 && (
+                <div className="mb-3">
+                  <span className="text-xs font-medium text-slate-600">专长：</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {agent.expertise.map((skill, i) => (
+                      <span key={i} className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-2 text-sm">
                 <div>

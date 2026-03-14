@@ -6,6 +6,8 @@ import { ChatShell } from '@/components/chat/chat-shell'
 import { PanelShell } from '@/components/panel/panel-shell'
 import { AgentGeneratorPanel } from '@/components/panel/agent-generator-panel'
 import { EventsPanel } from '@/components/panel/events-panel'
+import { SimingPanel } from '@/components/panel/siming-panel'
+import { HoutuPanel } from '@/components/panel/houtu-panel'
 import { createInitialWorldSlice } from '@/domain/world'
 import { getWorld } from '@/store/worlds'
 import { runWorldTick } from '@/engine/orchestrator'
@@ -16,7 +18,7 @@ export default function WorldDetailPage() {
   
   const worldRecord = getWorld(worldId)
   const [world, setWorld] = React.useState<ReturnType<typeof createInitialWorldSlice> | null>(null)
-  const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'events'>('world')
+  const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'plots' | 'houtu' | 'events'>('world')
   const [advancing, setAdvancing] = React.useState(false)
 
   React.useEffect(() => {
@@ -100,6 +102,7 @@ export default function WorldDetailPage() {
           onClick={handleAdvanceTime}
           disabled={advancing || !world || world.agents.npcs.length === 0}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-blue-700"
+          title={world?.agents.npcs.length === 0 ? '需要先初始化世界（女娲造人 + 司命编织）' : ''}
         >
           {advancing ? '推进中...' : `⏩ 推进时间 (Tick ${world?.tick || 0})`}
         </button>
@@ -127,7 +130,27 @@ export default function WorldDetailPage() {
               }`}
               onClick={() => setActiveTab('agents')}
             >
-              生成人物
+              女娲造人
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'plots'
+                  ? 'border-b-2 border-slate-900 text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              onClick={() => setActiveTab('plots')}
+            >
+              司命编织
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'houtu'
+                  ? 'border-b-2 border-slate-900 text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              onClick={() => setActiveTab('houtu')}
+            >
+              后土轮回
             </button>
             <button
               className={`px-4 py-2 text-sm font-medium ${
@@ -150,6 +173,14 @@ export default function WorldDetailPage() {
               onWorldUpdate={setWorld}
             />
           )}
+          {activeTab === 'plots' && (
+            <SimingPanel
+              worldId={worldId}
+              world={world}
+              onWorldUpdate={setWorld}
+            />
+          )}
+          {activeTab === 'houtu' && <HoutuPanel world={world} />}
           {activeTab === 'events' && <EventsPanel world={world} />}
         </div>
       </div>

@@ -39,6 +39,7 @@ export const createPatch = (patch: AgentPatch): Required<AgentPatch> => ({
 export function createPersonalAgent(seed: string): PersonalAgentState {
   return {
     kind: 'personal',
+    role: 'npc',  // 默认为 NPC
     genetics: { seed },
     identity: { name: seed },
     memory_short: [],
@@ -61,5 +62,6 @@ export function createPersonalAgent(seed: string): PersonalAgentState {
     goals: [],
     relations: {},
     action_history: [],
+    life_status: 'alive',
   }
 }
