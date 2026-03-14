@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { PersonalAgentState } from '@/domain/world'
 import { createPersonalAgent } from '@/domain/agents'
+import { createAnthropicClient, getModel } from './anthropic'
 
 type GenerateAgentsOptions = {
   prompt: string
@@ -39,12 +40,9 @@ export async function generatePersonalAgents(
 ): Promise<PersonalAgentState[]> {
   const { prompt, count } = options
 
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || '',
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-  })
+  const client = createAnthropicClient()
 
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+  const model = getModel()
 
   const systemPrompt = `你是女娲，负责为世界创造生动的人物。根据世界背景和描述，生成 ${count} 个独特的 agents。
 

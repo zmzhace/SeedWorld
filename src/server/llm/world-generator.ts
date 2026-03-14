@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { WorldSlice, SocialContext } from '@/domain/world'
 import { createInitialWorldSlice } from '@/domain/world'
+import { createAnthropicClient, getModel } from './anthropic'
 
 type GenerateWorldOptions = {
   worldPrompt: string
@@ -23,15 +24,12 @@ export async function generateInitialWorld(
 ): Promise<WorldSlice> {
   const { worldPrompt } = options
 
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || '',
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-  })
+  const client = createAnthropicClient()
 
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+  const model = getModel()
 
   console.log('Pangu: Using model:', model)
-  console.log('Pangu: Base URL:', process.env.ANTHROPIC_BASE_URL)
+  console.log('Pangu: Base URL:', client.baseURL)
 
   const systemPrompt = `你是盘古（Pangu），世界创造系统。根据用户的描述生成一个初始世界状态。
 

@@ -8,14 +8,19 @@ type AgentObserverPanelProps = {
 }
 
 export function AgentObserverPanel({ world }: AgentObserverPanelProps) {
-  const [selectedAgent, setSelectedAgent] = React.useState<PersonalAgentState | null>(null)
+  const [selectedSeed, setSelectedSeed] = React.useState<string | null>(null)
 
   // 选择第一个 agent 作为默认
   React.useEffect(() => {
-    if (world.agents.npcs.length > 0 && !selectedAgent) {
-      setSelectedAgent(world.agents.npcs[0])
+    if (world.agents.npcs.length > 0 && !selectedSeed) {
+      setSelectedSeed(world.agents.npcs[0].genetics.seed)
     }
-  }, [world.agents.npcs, selectedAgent])
+  }, [world.agents.npcs, selectedSeed])
+
+  // 从当前 world 中获取最新的 agent 状态
+  const selectedAgent = selectedSeed
+    ? world.agents.npcs.find(a => a.genetics.seed === selectedSeed) ?? null
+    : null
 
   if (world.agents.npcs.length === 0) {
     return (
@@ -44,7 +49,7 @@ export function AgentObserverPanel({ world }: AgentObserverPanelProps) {
           value={selectedAgent?.genetics.seed || ''}
           onChange={(e) => {
             const agent = world.agents.npcs.find(a => a.genetics.seed === e.target.value)
-            setSelectedAgent(agent || null)
+            setSelectedSeed(agent?.genetics.seed ?? null)
           }}
           className="w-full rounded border px-3 py-2 text-sm"
         >

@@ -21,12 +21,16 @@ export default function WorldDetailPage() {
   const router = useRouter()
   const worldId = params.id as string
   
-  const worldRecord = getWorld(worldId)
+  const [worldRecord, setWorldRecord] = React.useState<ReturnType<typeof getWorld> | undefined>(undefined)
   const [world, setWorld] = React.useState<ReturnType<typeof createInitialWorldSlice> | null>(null)
   const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'narratives' | 'social' | 'timeline' | 'houtu' | 'observer' | 'events' | 'stats'>('world')
   const [advancing, setAdvancing] = React.useState(false)
   const [autoAdvancing, setAutoAdvancing] = React.useState(false)
   const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10) // 推进多少个 tick
+
+  React.useEffect(() => {
+    setWorldRecord(getWorld(worldId))
+  }, [worldId])
 
   React.useEffect(() => {
     if (worldRecord) {
@@ -117,10 +121,14 @@ export default function WorldDetailPage() {
     return (
       <main className="min-h-screen p-8">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold">World not found</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            The world you're looking for doesn't exist.
-          </p>
+          <h1 className="text-2xl font-semibold">
+            {worldRecord === undefined ? 'Loading world...' : 'World not found'}
+          </h1>
+          {worldRecord === null && (
+            <p className="mt-2 text-sm text-slate-600">
+              The world you're looking for doesn't exist.
+            </p>
+          )}
         </div>
       </main>
     )

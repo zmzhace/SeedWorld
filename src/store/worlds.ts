@@ -78,3 +78,15 @@ export function saveWorldSnapshot(id: string, snapshot: WorldSlice): WorldRecord
   return updateWorld(id, { worldSnapshot: snapshot })
 }
 
+export function deleteWorld(id: string): boolean {
+  const worlds = readAll()
+  const filtered = worlds.filter((w) => w.id !== id)
+  if (filtered.length === worlds.length) return false
+  writeAll(filtered)
+  // 同时清理 world snapshot
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(`world_${id}`)
+  }
+  return true
+}
+

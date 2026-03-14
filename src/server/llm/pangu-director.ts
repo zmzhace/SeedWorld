@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { WorldSlice } from '@/domain/world'
 import type { AgentPatch } from '@/domain/agents'
+import { createAnthropicClient, getModel } from './anthropic'
 
 /**
  * 盘古导演 - 世界驱动 agent，负责推动故事线发展
@@ -22,12 +23,9 @@ type StoryEvent = {
  * 分析当前世界状态，生成故事线事件
  */
 export async function generateStorylineEvent(world: WorldSlice): Promise<AgentPatch> {
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || '',
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-  })
+  const client = createAnthropicClient()
 
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+  const model = getModel()
 
   // 提取世界背景
   const genesisEvent = world.events.find(e => e.type === 'world_created')

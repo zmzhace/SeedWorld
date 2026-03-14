@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { WorldSlice, PersonalAgentState } from '@/domain/world'
+import { createAnthropicClient, getModel } from './anthropic'
 
 type ObservationOptions = {
   world: WorldSlice
@@ -11,12 +12,9 @@ export async function generateObservationSummary(
 ): Promise<string> {
   const { world, agent } = options
 
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || '',
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-  })
+  const client = createAnthropicClient()
 
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+  const model = getModel()
 
   // Get recent memories
   const recentMemories = [...agent.memory_short, ...agent.memory_long]
