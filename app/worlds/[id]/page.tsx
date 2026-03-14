@@ -9,6 +9,7 @@ import { EventsPanel } from '@/components/panel/events-panel'
 import { SimingPanel } from '@/components/panel/siming-panel'
 import { HoutuPanel } from '@/components/panel/houtu-panel'
 import { AgentObserverPanel } from '@/components/panel/agent-observer-panel'
+import { SystemStatsPanel } from '@/components/panel/system-stats-panel'
 import { createInitialWorldSlice } from '@/domain/world'
 import { getWorld } from '@/store/worlds'
 import { runWorldTick } from '@/engine/orchestrator'
@@ -19,7 +20,7 @@ export default function WorldDetailPage() {
   
   const worldRecord = getWorld(worldId)
   const [world, setWorld] = React.useState<ReturnType<typeof createInitialWorldSlice> | null>(null)
-  const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'plots' | 'houtu' | 'observer' | 'events'>('world')
+  const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'plots' | 'houtu' | 'observer' | 'events' | 'stats'>('world')
   const [advancing, setAdvancing] = React.useState(false)
   const [autoAdvancing, setAutoAdvancing] = React.useState(false)
   const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10) // 推进多少个 tick
@@ -236,6 +237,16 @@ export default function WorldDetailPage() {
             >
               事件日志
             </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'stats'
+                  ? 'border-b-2 border-slate-900 text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              onClick={() => setActiveTab('stats')}
+            >
+              📊 系统统计
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -257,6 +268,7 @@ export default function WorldDetailPage() {
           )}
           {activeTab === 'houtu' && <HoutuPanel world={world} />}
           {activeTab === 'events' && <EventsPanel world={world} />}
+          {activeTab === 'stats' && <SystemStatsPanel world={world} />}
         </div>
       </div>
     </main>

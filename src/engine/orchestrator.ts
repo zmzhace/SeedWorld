@@ -12,6 +12,9 @@ import { arbitratePatches } from './arbiter'
 import { judgeLife, decideReincarnation, createHoutuConfig } from '@/domain/houtu'
 import { createPersonalAgent } from '@/domain/agents'
 import { checkPlotTriggers, advancePlotStages, applyPlotInfluenceToAgents } from './plot-executor'
+import { createTimeEngine } from './time-engine'
+import { createRecommendationSystem } from './recommendation-system'
+import { createKnowledgeGraph } from './knowledge-graph'
 
 type OrchestratorOptions = {
   search?: () => Promise<SearchSignal[]>
@@ -26,21 +29,41 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   const nextTick = world.tick + 1
   const timestamp = new Date(Date.parse(world.time) + 1000).toISOString()
 
+  // 初始化新系统
+  const timeEngine = createTimeEngine()
+  const recSystem = createRecommendationSystem()
+  const knowledgeGraph = createKnowledgeGraph(world)
+
+  // 时间引擎：初始化所有 agents 的时间模式（如果还没有）
+  const npcsWithTimePatterns = timeEngine.initializeTimePatterns(world.agents.npcs)
+
+  // 时间引擎：获取当前时间应该激活的 agents
+  const activeNpcs = timeEngine.getActiveAgents(npcsWithTimePatterns, world)
+  
+  console.log(`[Orchestrator] Tick ${nextTick}: ${activeNpcs.length}/${npcsWithTimePatterns.length} agents active`)
+
   // Parallel update for personal agent
   const updatedMemoryShort = applyMemoryDecay(world.agents.personal.memory_short)
   const updatedMemoryLong = applyMemoryDecay(world.agents.personal.memory_long)
   const updatedVitals = updateVitalsAfterTick(world.agents.personal.vitals)
   const updatedPersona = applyPersonaDrift(world.agents.personal.persona, [])
 
-  // Parallel update for all NPC agents
+  // Parallel update for all NPC agents (只更新激活的 agents)
   const updatedNpcs = await Promise.all(
-    world.agents.npcs.map(async (npc) => ({
-      ...npc,
-      memory_short: applyMemoryDecay(npc.memory_short),
-      memory_long: applyMemoryDecay(npc.memory_long),
-      vitals: updateVitalsAfterTick(npc.vitals),
-      persona: applyPersonaDrift(npc.persona, []),
-    }))
+    npcsWithTimePatterns.map(async (npc) => {
+      // 如果 agent 未激活，直接返回
+      if (!activeNpcs.find(a => a.genetics.seed === npc.genetics.seed)) {
+        return npc
+      }
+      
+      return {
+        ...npc,
+        memory_short: applyMemoryDecay(npc.memory_short),
+        memory_long: applyMemoryDecay(npc.memory_long),
+        vitals: updateVitalsAfterTick(npc.vitals),
+        persona: applyPersonaDrift(npc.persona, []),
+      }
+    })
   )
 
   // 应用剧情影响到 agents（在执行行动之前）
@@ -105,10 +128,10 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     return baseNext
   }
 
-  // 并行执行 Pangu agents 和 NPC agents
+  // 并行执行 Pangu agents 和 NPC agents（只执行激活的 agents）
   const [panguResults, npcResults] = await Promise.all([
     options.panguRegistry.runAll(world),
-    executeNpcAgents(world),
+    executeNpcAgents({ ...world, agents: { ...world.agents, npcs: activeNpcs } }),
   ])
 
   // 合并所有 agent 的结果
@@ -121,7 +144,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
 
   // 应用 NPC agents 的状态更新
   const updatedNpcsMap = new Map(npcResults.map(r => [r.agentId, r.updatedAgent]))
-  const finalNpcs = baseNext.agents.npcs.map(agent => 
+  const npcsAfterExecution = baseNext.agents.npcs.map(agent => 
     updatedNpcsMap.get(agent.genetics.seed) || agent
   )
 
@@ -130,7 +153,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     tick: baseNext.tick + patch.timeDelta,
     agents: {
       ...baseNext.agents,
-      npcs: finalNpcs,
+      npcs: npcsAfterExecution,
     },
     events: [
       ...baseNext.events,
@@ -345,6 +368,15 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     plots: finalPlots,
     events: [...next.events, ...plotEvents],
   }
+
+  // 知识图谱更新：重建图谱（每个 tick）
+  const updatedKnowledgeGraph = createKnowledgeGraph(next)
+  const graphStats = updatedKnowledgeGraph.getStats()
+  console.log(`[KnowledgeGraph] Tick ${nextTick}: ${graphStats.totalNodes} nodes, ${graphStats.totalEdges} edges`)
+
+  // 时间引擎统计
+  const activityStats = timeEngine.getActivityStats(next)
+  console.log(`[TimeEngine] Activity: ${activityStats.active}/${activityStats.total} (${(activityStats.activityRate * 100).toFixed(1)}%)`)
 
   await bus.emit('after_tick', { world: next })
 

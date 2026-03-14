@@ -71,6 +71,14 @@ export type PersonalAgentState = {
   expertise?: string[]  // 专长领域
   core_belief?: string  // 核心信念
   success_metrics?: Record<string, number>  // 成功指标追踪（如：财富、声望、知识等）
+  
+  // 时间引擎 - 参考 OASIS，模拟真实作息模式
+  activity_pattern?: number[]  // 24 维，每小时的活跃概率 [0-1]
+  timezone_offset?: number  // 时区偏移（小时）
+  sleep_schedule?: {
+    typical_sleep_hour: number  // 通常睡觉时间（0-23）
+    typical_wake_hour: number   // 通常起床时间（0-23）
+  }
 }
 
 export type WorldSlice = {
