@@ -293,62 +293,33 @@ export class KnowledgeGraph {
       }
     }
 
-    // 3. 添加剧情作为节点
-    for (const plot of world.plots) {
+    // 3. 添加叙事作为节点（涌现式叙事系统）
+    for (const narrative of world.narratives.patterns) {
       graph.addNode({
-        id: plot.id,
-        type: 'plot',
-        label: plot.title,
+        id: narrative.id,
+        type: 'concept',
+        label: narrative.type,
         properties: {
-          title: plot.title,
-          description: plot.description,
-          type: plot.type,
-          status: plot.status,
-          current_stage: plot.current_stage,
-          stages: plot.stages,
+          type: narrative.type,
+          intensity: narrative.intensity,
+          participants: narrative.participants,
+          context: narrative.context,
+          status: narrative.status,
         },
-        created_at: plot.created_at,
+        created_at: narrative.detected_at,
         updated_at: currentTick,
       })
 
-      // 连接剧情与主角
-      for (const protagonistSeed of plot.protagonists) {
+      // 连接叙事与参与者
+      for (const participantSeed of narrative.participants) {
         graph.addEdge({
-          id: `${plot.id}-protagonist-${protagonistSeed}`,
-          source: protagonistSeed,
-          target: plot.id,
-          relation: 'protagonist_of',
-          weight: 1.0,
+          id: `${narrative.id}-participant-${participantSeed}`,
+          source: participantSeed,
+          target: narrative.id,
+          relation: 'participates_in',
+          weight: narrative.intensity,
           properties: {},
-          created_at: plot.created_at,
-          updated_at: currentTick,
-        })
-      }
-
-      // 连接剧情与对手
-      for (const antagonistSeed of plot.antagonists) {
-        graph.addEdge({
-          id: `${plot.id}-antagonist-${antagonistSeed}`,
-          source: antagonistSeed,
-          target: plot.id,
-          relation: 'antagonist_of',
-          weight: 1.0,
-          properties: {},
-          created_at: plot.created_at,
-          updated_at: currentTick,
-        })
-      }
-
-      // 连接剧情与配角
-      for (const supportingSeed of plot.supporting) {
-        graph.addEdge({
-          id: `${plot.id}-supporting-${supportingSeed}`,
-          source: supportingSeed,
-          target: plot.id,
-          relation: 'supports',
-          weight: 0.7,
-          properties: {},
-          created_at: plot.created_at,
+          created_at: narrative.detected_at,
           updated_at: currentTick,
         })
       }
@@ -388,13 +359,13 @@ export class KnowledgeGraph {
         })
       }
 
-      // 连接事件与相关剧情
-      if (event.payload?.plot_id) {
-        const plotId = event.payload.plot_id as string
+      // 连接事件与相关叙事
+      if (event.payload?.narrative_id) {
+        const narrativeId = event.payload.narrative_id as string
         graph.addEdge({
-          id: `${event.id}-related-to-${plotId}`,
+          id: `${event.id}-related-to-${narrativeId}`,
           source: event.id,
-          target: plotId,
+          target: narrativeId,
           relation: 'related_to',
           weight: 1.0,
           properties: {},

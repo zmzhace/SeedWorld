@@ -87,7 +87,7 @@ export function AgentGeneratorPanel({ worldId, world, onWorldUpdate }: AgentGene
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">女娲造人</h2>
       <p className="text-sm text-slate-600">
-        女娲与司命协同工作。世界初始化时会自动创造 agents 和编织剧情。你也可以手动添加更多 agents。
+        女娲使用 LLM 创造个性化的 agents。世界初始化时会自动创造 5-10 个 agents，故事将从他们的自由互动中自然涌现。你也可以手动添加更多 agents。
       </p>
 
       <div className="rounded-lg border bg-blue-50 p-3 text-sm">
@@ -153,13 +153,6 @@ export function AgentGeneratorPanel({ worldId, world, onWorldUpdate }: AgentGene
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <span className={`rounded px-2 py-1 text-xs font-medium ${
-                    agent.role === 'protagonist' ? 'bg-yellow-100 text-yellow-800' :
-                    agent.role === 'supporting' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {agent.role === 'protagonist' ? '主角' : agent.role === 'supporting' ? '配角' : 'NPC'}
-                  </span>
                   <span className={`inline-flex items-center rounded px-2 py-1 text-xs font-medium ${
                     agent.life_status === 'alive' ? 'bg-green-100 text-green-800' :
                     agent.life_status === 'dead' ? 'bg-gray-100 text-gray-800' :

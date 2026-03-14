@@ -28,8 +28,8 @@ export function EventsPanel({ world }: EventsPanelProps) {
             const agentNames = payload.agent_names && Array.isArray(payload.agent_names) 
               ? (payload.agent_names as string[]).join(', ') 
               : null
-            const plotTitle = payload.plot_title ? String(payload.plot_title) : null
-            const stageName = payload.stage_name ? String(payload.stage_name) : null
+            const narrativeTitle = payload.narrative_title ? String(payload.narrative_title) : null
+            const narrativeType = payload.narrative_type ? String(payload.narrative_type) : null
             const agentName = payload.agent_name ? String(payload.agent_name) : null
             const cause = payload.cause ? String(payload.cause) : null
             const oldName = payload.old_name ? String(payload.old_name) : null
@@ -43,19 +43,18 @@ export function EventsPanel({ world }: EventsPanelProps) {
                 <div className="flex items-start justify-between">
                   <span className="font-medium text-slate-700">
                     {event.type === 'world_created' && '🌍 世界创建'}
+                    {event.type === 'world_initialized' && '✨ 世界初始化'}
                     {event.type === 'agents_created' && '👥 Agents 创建'}
-                    {event.type === 'plot_created' && '📖 剧情编织'}
-                    {event.type === 'plot_triggered' && '🎬 剧情触发'}
-                    {event.type === 'plot_stage_completed' && '✨ 剧情推进'}
-                    {event.type === 'plot_completed' && '🎉 剧情完成'}
-                    {event.type === 'plot_failed' && '💔 剧情失败'}
+                    {event.type === 'narrative_emerged' && '📖 叙事涌现'}
+                    {event.type === 'narrative_concluded' && '🎉 叙事完结'}
+                    {event.type === 'story_arc_detected' && '🎬 故事弧检测'}
                     {event.type === 'agent_death' && '💀 人物死亡'}
                     {event.type === 'agent_reincarnation' && '🔄 轮回转世'}
                     {event.type === 'tick' && '⏱️ 时间推进'}
                     {event.type === 'user_message' && '💬 用户消息'}
                     {event.type === 'micro' && '🎭 Agent 行动'}
                     {event.type === 'macro' && '🌟 重大事件'}
-                    {!['world_created', 'agents_created', 'plot_created', 'plot_triggered', 'plot_stage_completed', 'plot_completed', 'plot_failed', 'agent_death', 'agent_reincarnation', 'tick', 'user_message', 'micro', 'macro'].includes(event.type) && `📌 ${event.type}`}
+                    {!['world_created', 'world_initialized', 'agents_created', 'narrative_emerged', 'narrative_concluded', 'story_arc_detected', 'agent_death', 'agent_reincarnation', 'tick', 'user_message', 'micro', 'macro'].includes(event.type) && `📌 ${event.type}`}
                   </span>
                   <span className="text-xs text-slate-500">
                     {new Date(event.timestamp).toLocaleTimeString()}
@@ -68,8 +67,8 @@ export function EventsPanel({ world }: EventsPanelProps) {
                     {message && <div>消息: {message}</div>}
                     {count && <div>数量: {count}</div>}
                     {agentNames && <div>Agents: {agentNames}</div>}
-                    {plotTitle && <div>剧情: {plotTitle}</div>}
-                    {stageName && <div>阶段: {stageName}</div>}
+                    {narrativeTitle && <div>叙事: {narrativeTitle}</div>}
+                    {narrativeType && <div>类型: {narrativeType}</div>}
                     {agentName && event.type === 'agent_death' && cause && (
                       <div>💀 {agentName} - {cause}</div>
                     )}

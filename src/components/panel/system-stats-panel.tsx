@@ -128,7 +128,6 @@ export function SystemStatsPanel({ world }: SystemStatsPanelProps) {
               <div key={type} className="flex items-center justify-between text-xs">
                 <span className="text-purple-600">
                   {type === 'agent' && '👤 Agents'}
-                  {type === 'plot' && '📖 剧情'}
                   {type === 'event' && '⚡ 事件'}
                   {type === 'location' && '📍 地点'}
                   {type === 'organization' && '🏢 组织'}
@@ -176,9 +175,15 @@ export function SystemStatsPanel({ world }: SystemStatsPanelProps) {
             <span className="font-medium text-slate-900">{world.events.length}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-slate-700">活跃剧情:</span>
+            <span className="text-slate-700">活跃叙事:</span>
             <span className="font-medium text-slate-900">
-              {world.plots.filter(p => p.status === 'active').length}
+              {world.narratives.stats.active_patterns}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-700">故事弧:</span>
+            <span className="font-medium text-slate-900">
+              {world.narratives.stats.total_arcs}
             </span>
           </div>
         </div>
