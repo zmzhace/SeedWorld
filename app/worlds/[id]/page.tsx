@@ -7,6 +7,8 @@ import { PanelShell } from '@/components/panel/panel-shell'
 import { AgentGeneratorPanel } from '@/components/panel/agent-generator-panel'
 import { EventsPanel } from '@/components/panel/events-panel'
 import { NarrativePanel } from '@/components/panel/narrative-panel'
+import { SocialNetworkPanel } from '@/components/panel/social-network-panel'
+import { NarrativeTimelinePanel } from '@/components/panel/narrative-timeline-panel'
 import { HoutuPanel } from '@/components/panel/houtu-panel'
 import { AgentObserverPanel } from '@/components/panel/agent-observer-panel'
 import { SystemStatsPanel } from '@/components/panel/system-stats-panel'
@@ -20,7 +22,7 @@ export default function WorldDetailPage() {
   
   const worldRecord = getWorld(worldId)
   const [world, setWorld] = React.useState<ReturnType<typeof createInitialWorldSlice> | null>(null)
-  const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'narratives' | 'houtu' | 'observer' | 'events' | 'stats'>('world')
+  const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'narratives' | 'social' | 'timeline' | 'houtu' | 'observer' | 'events' | 'stats'>('world')
   const [advancing, setAdvancing] = React.useState(false)
   const [autoAdvancing, setAutoAdvancing] = React.useState(false)
   const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10) // 推进多少个 tick
@@ -215,7 +217,27 @@ export default function WorldDetailPage() {
               }`}
               onClick={() => setActiveTab('narratives')}
             >
-              涌现叙事
+              📖 涌现叙事
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'social'
+                  ? 'border-b-2 border-slate-900 text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              onClick={() => setActiveTab('social')}
+            >
+              🕸️ 社交网络
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'timeline'
+                  ? 'border-b-2 border-slate-900 text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              onClick={() => setActiveTab('timeline')}
+            >
+              ⏱️ 叙事时间线
             </button>
             <button
               className={`px-4 py-2 text-sm font-medium ${
@@ -261,6 +283,12 @@ export default function WorldDetailPage() {
           )}
           {activeTab === 'narratives' && (
             <NarrativePanel world={world} />
+          )}
+          {activeTab === 'social' && (
+            <SocialNetworkPanel world={world} />
+          )}
+          {activeTab === 'timeline' && (
+            <NarrativeTimelinePanel world={world} />
           )}
           {activeTab === 'houtu' && <HoutuPanel world={world} />}
           {activeTab === 'events' && <EventsPanel world={world} />}

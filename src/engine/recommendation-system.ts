@@ -46,11 +46,15 @@ export class RecommendationSystem {
     // 3. 社交网络推荐（关注的人的动态）
     const socialEvents = this.getSocialNetworkEvents(agent, world)
     
-    // 4. 混合推荐
+    // 4. 基于叙事的推荐（新增）
+    const narrativeEvents = this.getNarrativeBasedEvents(agent, world)
+    
+    // 5. 混合推荐
     return this.mergeRecommendations(
       interestBasedEvents,
       hotEvents,
-      socialEvents
+      socialEvents,
+      narrativeEvents
     )
   }
 
@@ -110,34 +114,107 @@ export class RecommendationSystem {
   }
 
   /**
+   * 基于叙事的推荐（新增）
+   */
+  private getNarrativeBasedEvents(
+    agent: PersonalAgentState,
+    world: WorldSlice
+  ): Array<{ event: WorldEvent; score: number }> {
+    // 找到 agent 参与的叙事
+    const participatingNarratives = world.narratives.patterns.filter(n =>
+      n.participants.includes(agent.genetics.seed)
+    )
+    
+    if (participatingNarratives.length === 0) {
+      return []
+    }
+    
+    // 推荐与这些叙事相关的事件
+    return world.events
+      .filter(event => this.isRelevantEvent(event))
+      .map(event => ({
+        event,
+        score: this.calculateNarrativeScore(event, participatingNarratives, world)
+      }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+  }
+  
+  /**
+   * 计算叙事相关分数
+   */
+  private calculateNarrativeScore(
+    event: WorldEvent,
+    narratives: typeof import('@/domain/narrative').NarrativePattern[],
+    world: WorldSlice
+  ): number {
+    let maxScore = 0
+    
+    for (const narrative of narratives) {
+      // 检查事件是否属于这个叙事
+      if (narrative.event_ids.includes(event.id)) {
+        // 叙事强度越高，分数越高
+        const score = narrative.intensity
+        
+        // 高潮阶段的叙事权重更高
+        const stageMultiplier = narrative.status === 'climax' ? 1.5 : 1.0
+        
+        maxScore = Math.max(maxScore, score * stageMultiplier)
+      }
+      
+      // 检查事件是否涉及叙事参与者
+      const eventText = this.getEventText(event)
+      const hasParticipant = narrative.participants.some(p =>
+        eventText.includes(p)
+      )
+      
+      if (hasParticipant) {
+        maxScore = Math.max(maxScore, narrative.intensity * 0.7)
+      }
+    }
+    
+    return maxScore
+  }
+
+  /**
    * 混合推荐结果
    */
   private mergeRecommendations(
     interestBased: Array<{ event: WorldEvent; score: number }>,
     hotBased: Array<{ event: WorldEvent; score: number }>,
-    socialBased: Array<{ event: WorldEvent; score: number }>
+    socialBased: Array<{ event: WorldEvent; score: number }>,
+    narrativeBased: Array<{ event: WorldEvent; score: number }>
   ): WorldEvent[] {
     const { topK, interestWeight, hotWeight, socialWeight } = this.config
+    const narrativeWeight = 0.3  // 叙事推荐权重
 
     // 创建事件 ID 到综合分数的映射
     const scoreMap = new Map<string, number>()
 
-    // 合并分数
+    // 合并分数（调整权重以适应新的叙事推荐）
+    const adjustedInterestWeight = interestWeight * 0.7
+    const adjustedHotWeight = hotWeight * 0.7
+    const adjustedSocialWeight = socialWeight * 0.7
+
     for (const { event, score } of interestBased) {
-      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * interestWeight)
+      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * adjustedInterestWeight)
     }
 
     for (const { event, score } of hotBased) {
-      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * hotWeight)
+      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * adjustedHotWeight)
     }
 
     for (const { event, score } of socialBased) {
-      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * socialWeight)
+      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * adjustedSocialWeight)
+    }
+    
+    for (const { event, score } of narrativeBased) {
+      scoreMap.set(event.id, (scoreMap.get(event.id) || 0) + score * narrativeWeight)
     }
 
     // 获取所有唯一事件
     const allEvents = new Map<string, WorldEvent>()
-    for (const { event } of [...interestBased, ...hotBased, ...socialBased]) {
+    for (const { event } of [...interestBased, ...hotBased, ...socialBased, ...narrativeBased]) {
       allEvents.set(event.id, event)
     }
 
