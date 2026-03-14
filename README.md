@@ -426,9 +426,7 @@ Tick 25: Alice、Bob、Charlie 达成和解
 
 ## 📞 联系方式
 
-- 📧 Email: your-email@example.com
-- 🐦 Twitter: [@your-twitter](https://twitter.com/your-twitter)
-- 💬 Discord: [加入我们的社区](https://discord.gg/your-invite)
+- 📧 Email: zmzhace@gmail.com
 
 ---
 

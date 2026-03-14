@@ -4,7 +4,6 @@
  */
 
 import type { PersonalAgentState, WorldSlice } from '@/domain/world'
-import type { PlotArc } from '@/domain/siming'
 
 export type NodeType = 'agent' | 'location' | 'organization' | 'event' | 'concept' | 'plot'
 
