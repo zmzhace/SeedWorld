@@ -1,6 +1,7 @@
 import type { PersonalAgentState, WorldSlice } from '@/domain/world'
 import type { AgentPatch } from '@/domain/agents'
 import { extractWorldKnowledge, generateAgentContext } from './world-knowledge'
+import { AgentDecisionMaker } from './agent-decision-maker'
 
 /**
  * NPC Agent Executor - 并行执行 NPC agents 的决策和行动
@@ -16,74 +17,50 @@ type AgentDecision = {
   reasoning?: string
 }
 
+// 创建全局决策制定器实例
+const decisionMaker = new AgentDecisionMaker()
+
+/**
+ * 获取行动的友好标签
+ */
+function getActionLabel(actionType: string): string {
+  const labels: Record<string, string> = {
+    'rest': '休息',
+    'reflect': '反思',
+    'relax': '放松',
+    'pursue_goal': '追求目标',
+    'socialize': '社交',
+    'interact': '互动',
+    'help': '帮助',
+    'compete': '竞争',
+    'avoid': '避免冲突',
+    'react_to_pressure': '应对压力',
+    'explore': '探索',
+  }
+  return labels[actionType] || actionType
+}
+
 /**
  * 为单个 NPC agent 生成决策
- * 使用世界知识和 agent 目标来做出上下文感知的决策
+ * 使用 AgentDecisionMaker 做出个性化决策
  */
 function makeAgentDecision(agent: PersonalAgentState, world: WorldSlice): AgentDecision {
-  // 提取世界知识
-  const worldKnowledge = extractWorldKnowledge(world)
-  
-  // 基于 agent 的状态、性格和目标做出决策
-  const { vitals, persona, emotion, goals } = agent
-  
-  let actionType = 'idle'
-  let intensity = 0.3
-  let target: string | undefined
-  let reasoning = ''
-  
-  // 如果能量低，休息
-  if (vitals.energy < 0.3) {
-    actionType = 'rest'
-    intensity = 0.8
-    reasoning = `能量过低 (${(vitals.energy * 100).toFixed(0)}%)，需要休息恢复`
-  }
-  // 如果压力高，放松
-  else if (vitals.stress > 0.7) {
-    actionType = 'relax'
-    intensity = 0.6
-    reasoning = `压力过高 (${(vitals.stress * 100).toFixed(0)}%)，需要放松`
-  }
-  // 如果有目标且主动性高，执行目标
-  else if (goals.length > 0 && persona.agency > 0.6) {
-    actionType = 'pursue_goal'
-    intensity = persona.agency
-    target = goals[0]
-    reasoning = `主动追求目标: ${goals[0]}。当前世界背景: ${worldKnowledge.narrative_seed}`
-  }
-  // 如果共情力高且开放性高，社交
-  else if (persona.empathy > 0.6 && persona.openness > 0.5 && worldKnowledge.known_agents.length > 1) {
-    actionType = 'socialize'
-    intensity = (persona.empathy + persona.openness) / 2
-    // 随机选择一个其他 agent 作为社交对象
-    const otherAgents = worldKnowledge.known_agents.filter(a => a.seed !== agent.genetics.seed)
-    if (otherAgents.length > 0) {
-      target = otherAgents[Math.floor(Math.random() * otherAgents.length)].name
-    }
-    reasoning = `高共情力和开放性，尝试与${target || '他人'}社交`
-  }
-  // 根据世界压力做出反应
-  else if (worldKnowledge.social.pressures.length > 0 && persona.stability < 0.5) {
-    actionType = 'react_to_pressure'
-    intensity = 1 - persona.stability
-    target = worldKnowledge.social.pressures[0]
-    reasoning = `对社会压力做出反应: ${target}`
-  }
-  // 否则探索
-  else {
-    actionType = 'explore'
-    intensity = persona.openness
-    reasoning = `探索世界: ${worldKnowledge.environment.description}`
-  }
+  // 使用 AgentDecisionMaker 做决策
+  const decision = decisionMaker.makeDecision({
+    world,
+    agent,
+    narratives: world.narratives.patterns,
+    recentEvents: world.events.slice(-20)
+  })
   
   return {
     agentId: agent.genetics.seed,
     action: {
-      type: actionType,
-      target,
-      intensity,
+      type: decision.type,
+      target: decision.target,
+      intensity: decision.intensity,
     },
-    reasoning,
+    reasoning: decision.reason,
   }
 }
 
@@ -99,7 +76,8 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
   // 根据行动类型更新 agent 状态
   switch (action.type) {
     case 'rest':
-      // 休息恢复能量，降低压力
+    case 'reflect':
+      // 休息/反思恢复能量，降低压力
       updatedAgent.vitals = {
         ...updatedAgent.vitals,
         energy: Math.min(1, updatedAgent.vitals.energy + 0.2 * action.intensity),
@@ -147,7 +125,8 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
       break
       
     case 'socialize':
-      // 社交降低压力，消耗少量能量，建立关系
+    case 'interact':
+      // 社交/互动降低压力，消耗少量能量，建立关系
       updatedAgent.vitals = {
         ...updatedAgent.vitals,
         energy: Math.max(0, updatedAgent.vitals.energy - 0.08),
@@ -166,6 +145,65 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
         if (updatedAgent.success_metrics) {
           updatedAgent.success_metrics.reputation = (updatedAgent.success_metrics.reputation || 0) + 1
         }
+      }
+      break
+      
+    case 'help':
+      // 帮助他人消耗能量，但增强关系和声誉
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.12),
+        stress: Math.max(0, updatedAgent.vitals.stress - 0.05),
+      }
+      updatedAgent.emotion = {
+        label: '满足',
+        intensity: 0.7,
+      }
+      if (action.target) {
+        updatedAgent.relations = {
+          ...updatedAgent.relations,
+          [action.target]: Math.min(1, (updatedAgent.relations[action.target] || 0) + 0.2),
+        }
+        if (updatedAgent.success_metrics) {
+          updatedAgent.success_metrics.reputation = (updatedAgent.success_metrics.reputation || 0) + 2
+        }
+      }
+      break
+      
+    case 'compete':
+      // 竞争消耗大量能量，增加压力，可能恶化关系
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        energy: Math.max(0, updatedAgent.vitals.energy - 0.2 * action.intensity),
+        stress: Math.min(1, updatedAgent.vitals.stress + 0.15 * action.intensity),
+        focus: Math.min(1, updatedAgent.vitals.focus + 0.15),
+      }
+      updatedAgent.emotion = {
+        label: '紧张',
+        intensity: action.intensity,
+      }
+      if (action.target) {
+        updatedAgent.relations = {
+          ...updatedAgent.relations,
+          [action.target]: Math.max(-1, (updatedAgent.relations[action.target] || 0) - 0.1),
+        }
+        // 有概率获得权力
+        if (Math.random() < 0.2 * action.intensity && updatedAgent.success_metrics) {
+          updatedAgent.success_metrics.power = (updatedAgent.success_metrics.power || 0) + 1
+        }
+      }
+      break
+      
+    case 'avoid':
+      // 避免冲突，降低压力但也降低专注
+      updatedAgent.vitals = {
+        ...updatedAgent.vitals,
+        stress: Math.max(0, updatedAgent.vitals.stress - 0.15),
+        focus: Math.max(0, updatedAgent.vitals.focus - 0.1),
+      }
+      updatedAgent.emotion = {
+        label: '谨慎',
+        intensity: 0.5,
       }
       break
       
@@ -209,12 +247,16 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
   // 所有行动都会轻微增加衰老
   updatedAgent.vitals.aging_index = Math.min(1, updatedAgent.vitals.aging_index + 0.001)
   
-  // 生成事件
+  // 生成事件（包含职业和决策理由）
+  const occupationLabel = agent.occupation ? `[${agent.occupation}]` : ''
+  const actionLabel = getActionLabel(action.type)
+  const targetLabel = action.target ? ` → ${action.target}` : ''
+  
   const event = {
     id: `agent-${agent.genetics.seed}-${world.tick}`,
     kind: 'micro' as const,
-    summary: `${agent.identity.name} ${action.type}${action.target ? ` (${action.target})` : ''}`,
-    conflict: false,
+    summary: `${agent.identity.name}${occupationLabel} ${actionLabel}${targetLabel}`,
+    conflict: action.type === 'compete',
   }
   
   const patch: AgentPatch = {

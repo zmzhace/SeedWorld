@@ -173,13 +173,19 @@ export class AgentDecisionMaker {
     // 2. 基于信念评分
     score += this.scoreByCoreBeliefs(agent, action)
     
-    // 3. 基于当前状态评分
+    // 3. 基于职业和专长评分（女娲字段）
+    score += this.scoreByOccupationAndExpertise(agent, action)
+    
+    // 4. 基于做事方式评分（女娲字段）
+    score += this.scoreByApproach(agent, action)
+    
+    // 5. 基于当前状态评分
     score += this.scoreByCurrentState(agent, action)
     
-    // 4. 基于叙事相关性评分
+    // 6. 基于叙事相关性评分
     score += this.scoreByNarrativeRelevance(agent, action, context.narratives)
     
-    // 5. 基于预期效果评分
+    // 7. 基于预期效果评分
     score += this.scoreByExpectedOutcome(agent, action, context)
     
     return score
@@ -227,19 +233,147 @@ export class AgentDecisionMaker {
       if (action.type === 'compete') score -= 1
     }
     
-    if (belief.includes('竞争') || belief.includes('胜利')) {
+    if (belief.includes('竞争') || belief.includes('胜利') || belief.includes('权力')) {
       if (action.type === 'compete') score += 2
       if (action.type === 'help') score -= 0.5
     }
     
-    if (belief.includes('知识') || belief.includes('学习')) {
+    if (belief.includes('知识') || belief.includes('学习') || belief.includes('智慧')) {
       if (action.type === 'explore') score += 2
       if (action.type === 'reflect') score += 1
     }
     
-    if (belief.includes('友谊') || belief.includes('关系')) {
+    if (belief.includes('友谊') || belief.includes('关系') || belief.includes('情义')) {
       if (action.type === 'interact') score += 2
       if (action.type === 'help') score += 1
+    }
+    
+    if (belief.includes('复仇') || belief.includes('仇恨')) {
+      if (action.type === 'compete') score += 2.5
+      if (action.type === 'avoid') score -= 1
+    }
+    
+    if (belief.includes('生存') || belief.includes('活下去')) {
+      if (action.type === 'avoid') score += 1.5
+      if (action.type === 'compete') score -= 0.5
+    }
+    
+    if (belief.includes('自由') || belief.includes('独立')) {
+      if (action.type === 'explore') score += 1.5
+      if (action.type === 'pursue_goal') score += 1
+    }
+    
+    return score
+  }
+  
+  /**
+   * 基于职业和专长评分（女娲字段）
+   */
+  private scoreByOccupationAndExpertise(agent: PersonalAgentState, action: AgentAction): number {
+    let score = 0
+    
+    // 职业影响行动偏好
+    if (agent.occupation) {
+      const occupation = agent.occupation.toLowerCase()
+      
+      // 战斗/竞争类职业
+      if (occupation.includes('战士') || occupation.includes('刺客') || occupation.includes('猎人')) {
+        if (action.type === 'compete') score += 1.5
+        if (action.type === 'avoid') score -= 0.5
+      }
+      
+      // 学者/研究类职业
+      if (occupation.includes('学者') || occupation.includes('研究') || occupation.includes('炼器') || occupation.includes('炼丹')) {
+        if (action.type === 'explore') score += 1.5
+        if (action.type === 'reflect') score += 1
+      }
+      
+      // 商人/交际类职业
+      if (occupation.includes('商人') || occupation.includes('外交') || occupation.includes('情报')) {
+        if (action.type === 'interact') score += 1.5
+        if (action.type === 'help') score += 0.5
+      }
+      
+      // 医者/辅助类职业
+      if (occupation.includes('医') || occupation.includes('治疗') || occupation.includes('药师')) {
+        if (action.type === 'help') score += 2
+      }
+      
+      // 修士/隐士类职业
+      if (occupation.includes('修士') || occupation.includes('隐士') || occupation.includes('僧')) {
+        if (action.type === 'reflect') score += 1.5
+        if (action.type === 'avoid') score += 0.5
+      }
+    }
+    
+    // 专长影响行动选择
+    if (agent.expertise && agent.expertise.length > 0) {
+      for (const skill of agent.expertise) {
+        const skillLower = skill.toLowerCase()
+        
+        // 战斗相关专长
+        if (skillLower.includes('战斗') || skillLower.includes('武器') || skillLower.includes('暗杀')) {
+          if (action.type === 'compete') score += 0.5
+        }
+        
+        // 社交相关专长
+        if (skillLower.includes('说服') || skillLower.includes('谈判') || skillLower.includes('交际')) {
+          if (action.type === 'interact') score += 0.5
+        }
+        
+        // 探索相关专长
+        if (skillLower.includes('探索') || skillLower.includes('追踪') || skillLower.includes('侦查')) {
+          if (action.type === 'explore') score += 0.5
+        }
+        
+        // 辅助相关专长
+        if (skillLower.includes('治疗') || skillLower.includes('支援') || skillLower.includes('保护')) {
+          if (action.type === 'help') score += 0.5
+        }
+      }
+    }
+    
+    return score
+  }
+  
+  /**
+   * 基于做事方式评分（女娲字段）
+   */
+  private scoreByApproach(agent: PersonalAgentState, action: AgentAction): number {
+    if (!agent.approach) return 0
+    
+    const approach = agent.approach.toLowerCase()
+    let score = 0
+    
+    // 冲动/激进的做事方式
+    if (approach.includes('冲动') || approach.includes('激进') || approach.includes('直接')) {
+      if (action.type === 'compete') score += 1
+      if (action.type === 'avoid') score -= 1
+      if (action.type === 'reflect') score -= 0.5
+    }
+    
+    // 谨慎/保守的做事方式
+    if (approach.includes('谨慎') || approach.includes('保守') || approach.includes('小心')) {
+      if (action.type === 'avoid') score += 1
+      if (action.type === 'reflect') score += 0.5
+      if (action.type === 'compete') score -= 0.5
+    }
+    
+    // 利益导向的做事方式
+    if (approach.includes('利益') || approach.includes('权衡') || approach.includes('计算')) {
+      if (action.type === 'pursue_goal') score += 1
+      if (action.type === 'help') score -= 0.5  // 除非有利可图
+    }
+    
+    // 情义导向的做事方式
+    if (approach.includes('情义') || approach.includes('忠诚') || approach.includes('友情')) {
+      if (action.type === 'help') score += 1.5
+      if (action.type === 'interact') score += 0.5
+    }
+    
+    // 探索/好奇的做事方式
+    if (approach.includes('好奇') || approach.includes('探索') || approach.includes('冒险')) {
+      if (action.type === 'explore') score += 1.5
     }
     
     return score
