@@ -30,13 +30,17 @@ export function EventsPanel({ world }: EventsPanelProps) {
                   {event.type === 'world_created' && '🌍 世界创建'}
                   {event.type === 'agents_created' && '👥 Agents 创建'}
                   {event.type === 'plot_created' && '📖 剧情编织'}
+                  {event.type === 'plot_triggered' && '🎬 剧情触发'}
+                  {event.type === 'plot_stage_completed' && '✨ 剧情推进'}
+                  {event.type === 'plot_completed' && '🎉 剧情完成'}
+                  {event.type === 'plot_failed' && '💔 剧情失败'}
                   {event.type === 'agent_death' && '💀 人物死亡'}
                   {event.type === 'agent_reincarnation' && '🔄 轮回转世'}
                   {event.type === 'tick' && '⏱️ 时间推进'}
                   {event.type === 'user_message' && '💬 用户消息'}
                   {event.type === 'micro' && '🎭 Agent 行动'}
                   {event.type === 'macro' && '🌟 重大事件'}
-                  {!['world_created', 'agents_created', 'plot_created', 'agent_death', 'agent_reincarnation', 'tick', 'user_message', 'micro', 'macro'].includes(event.type) && `📌 ${event.type}`}
+                  {!['world_created', 'agents_created', 'plot_created', 'plot_triggered', 'plot_stage_completed', 'plot_completed', 'plot_failed', 'agent_death', 'agent_reincarnation', 'tick', 'user_message', 'micro', 'macro'].includes(event.type) && `📌 ${event.type}`}
                 </span>
                 <span className="text-xs text-slate-500">
                   {new Date(event.timestamp).toLocaleTimeString()}
@@ -52,6 +56,7 @@ export function EventsPanel({ world }: EventsPanelProps) {
                     <p>Agents: {event.payload.agent_names.join(', ')}</p>
                   )}
                   {event.payload.plot_title && <p>剧情: {String(event.payload.plot_title)}</p>}
+                  {event.payload.stage_name && <p>阶段: {String(event.payload.stage_name)}</p>}
                   {event.payload.agent_name && event.type === 'agent_death' && (
                     <p>💀 {String(event.payload.agent_name)} - {String(event.payload.cause)}</p>
                   )}

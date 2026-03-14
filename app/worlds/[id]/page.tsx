@@ -22,7 +22,7 @@ export default function WorldDetailPage() {
   const [activeTab, setActiveTab] = React.useState<'world' | 'agents' | 'plots' | 'houtu' | 'observer' | 'events'>('world')
   const [advancing, setAdvancing] = React.useState(false)
   const [autoAdvancing, setAutoAdvancing] = React.useState(false)
-  const [autoAdvanceInterval, setAutoAdvanceInterval] = React.useState<number>(3) // 秒
+  const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10) // 推进多少个 tick
 
   React.useEffect(() => {
     if (worldRecord) {
@@ -72,16 +72,33 @@ export default function WorldDetailPage() {
     }
   }
 
-  // 自动推进效果
+  // 自动推进效果 - 按 tick 数推进
   React.useEffect(() => {
     if (!autoAdvancing || !world || world.agents.npcs.length === 0) return
 
-    const timer = setInterval(() => {
-      handleAdvanceTime()
-    }, autoAdvanceInterval * 1000)
+    let ticksAdvanced = 0
+    const advanceNextTick = async () => {
+      if (ticksAdvanced >= autoAdvanceTicks) {
+        setAutoAdvancing(false)
+        return
+      }
+      
+      await handleAdvanceTime()
+      ticksAdvanced++
+      
+      // 继续推进下一个 tick（延迟 500ms 让 UI 更新）
+      if (ticksAdvanced < autoAdvanceTicks && autoAdvancing) {
+        setTimeout(advanceNextTick, 500)
+      }
+    }
 
-    return () => clearInterval(timer)
-  }, [autoAdvancing, world, autoAdvanceInterval])
+    advanceNextTick()
+
+    // 清理函数
+    return () => {
+      ticksAdvanced = autoAdvanceTicks // 停止推进
+    }
+  }, [autoAdvancing])
 
   const toggleAutoAdvance = () => {
     setAutoAdvancing(!autoAdvancing)
@@ -120,20 +137,21 @@ export default function WorldDetailPage() {
         <div className="flex items-center gap-2">
           {/* 自动推进控制 */}
           <div className="flex items-center gap-2 rounded border bg-white px-3 py-2">
-            <label className="text-xs text-slate-600">间隔(秒):</label>
+            <label className="text-xs text-slate-600">推进:</label>
             <input
               type="number"
               min="1"
-              max="60"
-              value={autoAdvanceInterval}
-              onChange={(e) => setAutoAdvanceInterval(Math.max(1, parseInt(e.target.value) || 3))}
+              max="100"
+              value={autoAdvanceTicks}
+              onChange={(e) => setAutoAdvanceTicks(Math.max(1, parseInt(e.target.value) || 10))}
               className="w-16 rounded border px-2 py-1 text-xs"
               disabled={autoAdvancing}
             />
+            <span className="text-xs text-slate-600">Ticks</span>
           </div>
           <button
             onClick={toggleAutoAdvance}
-            disabled={!world || world.agents.npcs.length === 0}
+            disabled={!world || world.agents.npcs.length === 0 || advancing}
             className={`rounded px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
               autoAdvancing 
                 ? 'bg-red-600 hover:bg-red-700' 
@@ -141,7 +159,7 @@ export default function WorldDetailPage() {
             }`}
             title={world?.agents.npcs.length === 0 ? '需要先初始化世界' : ''}
           >
-            {autoAdvancing ? '⏸️ 停止自动推进' : '▶️ 自动推进'}
+            {autoAdvancing ? '⏸️ 停止' : '▶️ 自动推进'}
           </button>
           <button
             onClick={handleAdvanceTime}
@@ -149,7 +167,7 @@ export default function WorldDetailPage() {
             className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-blue-700"
             title={world?.agents.npcs.length === 0 ? '需要先初始化世界' : ''}
           >
-            {advancing ? '推进中...' : `⏩ 推进一步 (Tick ${world?.tick || 0})`}
+            {advancing ? '推进中...' : `⏩ +1 Tick (当前 ${world?.tick || 0})`}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@ import type { SearchSignal } from '@/domain/search'
 import { arbitratePatches } from './arbiter'
 import { judgeLife, decideReincarnation, createHoutuConfig } from '@/domain/houtu'
 import { createPersonalAgent } from '@/domain/agents'
+import { checkPlotTriggers, advancePlotStages, applyPlotInfluenceToAgents } from './plot-executor'
 
 type OrchestratorOptions = {
   search?: () => Promise<SearchSignal[]>
@@ -41,6 +42,9 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
       persona: applyPersonaDrift(npc.persona, []),
     }))
   )
+
+  // 应用剧情影响到 agents（在执行行动之前）
+  const npcsWithPlotInfluence = applyPlotInfluenceToAgents(updatedNpcs, world)
 
   const searchResults = options.search ? await options.search() : []
   const mappedContext = searchResults.length
@@ -92,7 +96,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
         persona: updatedPersona,
         action_history: [...world.agents.personal.action_history, { type: action.type, timestamp }],
       },
-      npcs: updatedNpcs,
+      npcs: npcsWithPlotInfluence,
     },
   }
 
@@ -253,6 +257,93 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
       npcs: finalNpcs,
     },
     events: [...next.events, ...houtuEvents],
+  }
+
+  // 剧情系统 - 检查触发、完成、失败
+  const { triggeredPlots, completedPlots, failedPlots } = checkPlotTriggers(next)
+  
+  // 更新剧情状态
+  const updatedPlots = next.plots.map(plot => {
+    if (triggeredPlots.find(p => p.id === plot.id)) {
+      return { ...plot, status: 'active' as const }
+    }
+    if (completedPlots.find(p => p.id === plot.id)) {
+      return { ...plot, status: 'completed' as const }
+    }
+    if (failedPlots.find(p => p.id === plot.id)) {
+      return { ...plot, status: 'failed' as const }
+    }
+    return plot
+  })
+  
+  // 推进剧情阶段
+  const { updatedPlots: plotsWithAdvancedStages, stageEvents } = advancePlotStages({
+    ...next,
+    plots: updatedPlots,
+  })
+  
+  // 合并剧情更新
+  const finalPlots = updatedPlots.map(plot => {
+    const advanced = plotsWithAdvancedStages.find(p => p.id === plot.id)
+    return advanced || plot
+  })
+  
+  // 生成剧情事件
+  const plotEvents: typeof next.events = []
+  
+  for (const plot of triggeredPlots) {
+    plotEvents.push({
+      id: `plot-trigger-${next.tick}-${plot.id}`,
+      type: 'plot_triggered',
+      timestamp,
+      payload: {
+        plot_id: plot.id,
+        plot_title: plot.title,
+      },
+    })
+  }
+  
+  for (const plot of completedPlots) {
+    plotEvents.push({
+      id: `plot-complete-${next.tick}-${plot.id}`,
+      type: 'plot_completed',
+      timestamp,
+      payload: {
+        plot_id: plot.id,
+        plot_title: plot.title,
+      },
+    })
+  }
+  
+  for (const plot of failedPlots) {
+    plotEvents.push({
+      id: `plot-failed-${next.tick}-${plot.id}`,
+      type: 'plot_failed',
+      timestamp,
+      payload: {
+        plot_id: plot.id,
+        plot_title: plot.title,
+      },
+    })
+  }
+  
+  for (const stageEvent of stageEvents) {
+    plotEvents.push({
+      id: `plot-stage-${next.tick}-${stageEvent.plotId}`,
+      type: 'plot_stage_completed',
+      timestamp,
+      payload: {
+        plot_id: stageEvent.plotId,
+        stage_name: stageEvent.stageName,
+      },
+    })
+  }
+  
+  // 最终更新
+  next = {
+    ...next,
+    plots: finalPlots,
+    events: [...next.events, ...plotEvents],
   }
 
   await bus.emit('after_tick', { world: next })
