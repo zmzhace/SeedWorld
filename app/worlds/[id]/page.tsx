@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { ChatShell } from '@/components/chat/chat-shell'
 import { PanelShell } from '@/components/panel/panel-shell'
 import { AgentGeneratorPanel } from '@/components/panel/agent-generator-panel'
@@ -18,6 +18,7 @@ import { runWorldTick } from '@/engine/orchestrator'
 
 export default function WorldDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const worldId = params.id as string
   
   const worldRecord = getWorld(worldId)
@@ -327,6 +328,7 @@ export default function WorldDetailPage() {
           {activeTab === 'events' && <EventsPanel world={world} />}
           {activeTab === 'stats' && <SystemStatsPanel world={world} />}
         </div>
+      </div>
       </div>
     </main>
   )
