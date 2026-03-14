@@ -3,9 +3,11 @@ import type { AgentPatch } from '@/domain/agents'
 import { extractWorldKnowledge, generateAgentContext } from './world-knowledge'
 import { AgentDecisionMaker } from './agent-decision-maker'
 import { CognitiveBiasSystem } from './cognitive-bias-system'
+import { generateAgentDecisionViaLLM, type LLMDecisionResult } from '@/server/llm/agent-decision-llm'
 
 /**
  * NPC Agent Executor - 并行执行 NPC agents 的决策和行动
+ * 优先使用 LLM 做决策，失败时 fallback 到规则引擎
  */
 
 type AgentDecision = {
@@ -16,10 +18,13 @@ type AgentDecision = {
     intensity: number
   }
   reasoning?: string
+  inner_monologue?: string
+  dialogue?: string
+  behavior_description?: string
 }
 
-// 创建全局决策制定器实例
-const decisionMaker = new AgentDecisionMaker()
+// 规则引擎作为 fallback
+const fallbackDecisionMaker = new AgentDecisionMaker()
 const biasSystem = new CognitiveBiasSystem()
 
 /**
@@ -43,19 +48,16 @@ function getActionLabel(actionType: string): string {
 }
 
 /**
- * 为单个 NPC agent 生成决策
- * 使用 AgentDecisionMaker 做出个性化决策
+ * 规则引擎 fallback 决策
  */
-function makeAgentDecision(agent: PersonalAgentState, world: WorldSlice): AgentDecision {
-  // 使用 AgentDecisionMaker 做决策
-  const decision = decisionMaker.makeDecision({
+function makeRuleFallbackDecision(agent: PersonalAgentState, world: WorldSlice): AgentDecision {
+  const decision = fallbackDecisionMaker.makeDecision({
     world,
     agent,
     narratives: world.narratives.patterns,
     recentEvents: world.events.slice(-20)
   })
 
-  // 认知偏差系统：分配偏差并应用到决策
   const biases = biasSystem.assignBiases(agent)
   const { modified_decision, effects } = biasSystem.applyBiasToDecision(
     agent,
@@ -72,7 +74,6 @@ function makeAgentDecision(agent: PersonalAgentState, world: WorldSlice): AgentD
     biases
   )
 
-  // 将偏差效果记录到 reasoning
   const appliedEffects = effects.filter(e => e.applied)
   const biasNote = appliedEffects.length > 0
     ? ` [偏差: ${appliedEffects.map(e => e.impact_description).join('; ')}]`
@@ -86,6 +87,28 @@ function makeAgentDecision(agent: PersonalAgentState, world: WorldSlice): AgentD
       intensity: modified_decision.intensity,
     },
     reasoning: (modified_decision.reason || '') + biasNote,
+  }
+}
+
+/**
+ * 为单个 NPC agent 生成决策
+ * 优先 LLM，失败 fallback 到规则引擎
+ */
+async function makeAgentDecision(agent: PersonalAgentState, world: WorldSlice): Promise<AgentDecision> {
+  try {
+    const llmResult = await generateAgentDecisionViaLLM(agent, world)
+    console.log(`[LLM Agent] ${agent.identity.name}: ${llmResult.action.type} - ${llmResult.behavior_description.substring(0, 50)}...`)
+    return {
+      agentId: agent.genetics.seed,
+      action: llmResult.action,
+      reasoning: llmResult.reasoning,
+      inner_monologue: llmResult.inner_monologue,
+      dialogue: llmResult.dialogue,
+      behavior_description: llmResult.behavior_description,
+    }
+  } catch (error) {
+    console.warn(`[LLM Agent] ${agent.identity.name} LLM 失败，降级到规则引擎:`, (error as Error).message)
+    return makeRuleFallbackDecision(agent, world)
   }
 }
 
@@ -278,10 +301,11 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
     { type: action.type, timestamp: new Date().toISOString() }
   ]
 
-  // 将决策生成为短期记忆
+  // 将决策生成为短期记忆（使用 LLM 的丰富描述）
   const actionLabel = getActionLabel(action.type)
   const targetLabel = action.target ? `对象: ${action.target}` : ''
-  const memoryContent = `${actionLabel}${targetLabel ? ' ' + targetLabel : ''}${decision.reasoning ? ' - ' + decision.reasoning : ''}`
+  const memoryContent = decision.behavior_description
+    || `${actionLabel}${targetLabel ? ' ' + targetLabel : ''}${decision.reasoning ? ' - ' + decision.reasoning : ''}`
 
   updatedAgent.memory_short = [
     ...(updatedAgent.memory_short || []),
@@ -296,27 +320,40 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
       retrieval_strength: 0.6,
     }
   ].slice(-20) // 保留最近 20 条
-  
-  // 生成事件（包含职业和决策理由）
+
+  // 写入 LLM 决策的丰富输出
+  updatedAgent.last_action_description = decision.behavior_description
+  updatedAgent.last_dialogue = decision.dialogue
+  updatedAgent.last_inner_monologue = decision.inner_monologue
+
+  // 生成事件（使用 LLM 的行为描述）
   const occupationLabel = agent.occupation ? `[${agent.occupation}]` : ''
-  const eventTargetLabel = action.target ? ` → ${action.target}` : ''
+  const eventSummary = decision.behavior_description
+    || `${agent.identity.name}${occupationLabel} ${actionLabel}${action.target ? ` → ${action.target}` : ''}`
 
   const event = {
     id: `agent-${agent.genetics.seed}-${world.tick}`,
     kind: 'micro' as const,
-    summary: `${agent.identity.name}${occupationLabel} ${actionLabel}${eventTargetLabel}`,
+    summary: eventSummary,
     conflict: action.type === 'compete',
   }
   
+  const notes: string[] = []
+  if (decision.reasoning) notes.push(decision.reasoning)
+  if (decision.inner_monologue) notes.push(`💭 ${decision.inner_monologue}`)
+  if (decision.dialogue) notes.push(`💬 ${decision.dialogue}`)
+
   const patch: AgentPatch = {
     timeDelta: 0,
     events: [event],
     rulesDelta: [],
-    notes: [decision.reasoning || ''],
+    notes,
     meta: {
       agentId: decision.agentId,
       actionType: action.type,
       intensity: action.intensity,
+      dialogue: decision.dialogue,
+      inner_monologue: decision.inner_monologue,
     },
   }
   

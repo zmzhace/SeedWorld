@@ -95,6 +95,11 @@ export type PersonalAgentState = {
       impact: number       // 影响力 [0-1]
     }
   }
+
+  // LLM Agent 决策输出 - 每 tick 更新
+  last_action_description?: string  // 上一次行动的具体描述
+  last_dialogue?: string            // 上一次说的话
+  last_inner_monologue?: string     // 上一次内心独白
 }
 
 // ===== 系统快照类型（用于持久化） =====
