@@ -58,7 +58,12 @@ export default function WorldDetailPage() {
     setAdvancing(true)
     try {
       console.log('Advancing time...')
-      const nextWorld = await runWorldTick(world)
+      // 创建一个简单的 panguRegistry 来执行 NPC agents
+      const panguRegistry = {
+        runAll: async () => [] // 返回空数组，让 NPC agents 自己执行
+      }
+      
+      const nextWorld = await runWorldTick(world, { panguRegistry })
       
       // Save to localStorage
       localStorage.setItem(`world_${worldId}`, JSON.stringify(nextWorld))
