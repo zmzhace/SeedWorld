@@ -374,7 +374,7 @@ function buildNetworkData(world: WorldSlice): {
   const nodes: NetworkNode[] = []
   const links: NetworkLink[] = []
 
-  const allAgents = [world.agents.personal, ...world.agents.npcs]
+  const allAgents = world.agents.npcs.filter(a => a.life_status === 'alive')
 
   for (const agent of allAgents) {
     const connectionCount = Object.keys(agent.relations).length
