@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="public/logo.svg" width="80" height="80" alt="SeedWorld" />
-
-# SeedWorld
+# 🌱 SeedWorld
 
 **Plant a world. Watch it grow.**
 
