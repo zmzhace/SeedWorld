@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="public/logo.svg" width="80" height="80" alt="Seedworld" />
+<img src="public/logo.svg" width="80" height="80" alt="SeedWorld" />
 
-# Seedworld
+# SeedWorld
 
 **Plant a world. Watch it grow.**
 
@@ -20,7 +20,7 @@
 
 ## What Is This?
 
-Seedworld is an emergent world simulation engine. You describe a world, it generates characters with personalities, desires, and grudges — and then you let go.
+SeedWorld is an emergent world simulation engine. You describe a world, it generates characters with personalities, desires, and grudges — and then you let go.
 
 No pre-written scripts. No behavior trees. Characters make their own decisions based on who they are, what they want, and who wronged them. Stories grow from chaos, all on their own.
 
@@ -268,7 +268,7 @@ app/
 
 <div align="center">
 
-**Seedworld** — We don't write stories. We plant them.
+**SeedWorld** — We don't write stories. We plant them.
 
 [Back to top](#seedworld)
 
