@@ -468,7 +468,7 @@ Return strict JSON:
   "reasoning": "third person, why this decision (1-2 sentences)",
   "inner_monologue": "first person inner thoughts",
   "dialogue": "what you say out loud (omit if silent)",
-  "behavior_description": "what happened, described in third person",
+  "behavior_description": "third person, 3-5 sentences: what happened, why, and what it means — give enough context for a reader who knows nothing",
   "new_location": "where you are after the action (if you didn't move, use current location)",
   "effects": {
     "energy_delta": -0.1 to 0.1,

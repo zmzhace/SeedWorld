@@ -170,7 +170,12 @@ function decisionToPatch(decision: AgentDecision, agent: PersonalAgentState, wor
     updatedAgent.location = decision.new_location
   }
 
-  const eventSummary = decision.behavior_description || `${agent.identity.name} ${action.type}`
+  // Build rich summary: behavior + dialogue + inner monologue
+  const summaryParts: string[] = []
+  if (decision.behavior_description) summaryParts.push(decision.behavior_description)
+  if (decision.dialogue) summaryParts.push(`"${decision.dialogue}"`)
+  if (decision.inner_monologue) summaryParts.push(`（${decision.inner_monologue}）`)
+  const eventSummary = summaryParts.join(' ') || `${agent.identity.name} ${action.type}`
 
   const event = {
     id: `agent-${agent.genetics.seed}-${world.tick}`,
