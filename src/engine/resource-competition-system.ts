@@ -55,100 +55,38 @@ export class ResourceCompetitionSystem {
   private claims: ResourceClaim[] = []
   
   /**
-   * Initialize resources
+   * Initialize resources — starts empty, resources emerge from LLM feedback
+   * or are seeded generically by type from the world context
    */
   initializeResources(world: WorldSlice): void {
-    // Material resources
-    this.resources.set('food', {
-      id: 'food',
-      type: 'material',
-      name: 'food',
-      amount: 100,
-      max_amount: 100,
-      regeneration_rate: 5,
-      scarcity: 0.3,
-      value: 0.8
-    })
+    // No hardcoded resources — they will be dynamically created via:
+    // 1. LLM system_feedback.resource_action (claimFromLLMFeedback creates on demand)
+    // 2. The seed method below for minimal bootstrap
 
-    this.resources.set('water', {
-      id: 'water',
-      type: 'material',
-      name: 'water',
-      amount: 80,
-      max_amount: 100,
-      regeneration_rate: 10,
-      scarcity: 0.2,
-      value: 0.9
-    })
-
-    this.resources.set('shelter', {
-      id: 'shelter',
-      type: 'material',
-      name: 'shelter',
-      amount: 50,
-      max_amount: 50,
-      regeneration_rate: 0,
-      scarcity: 0.5,
-      value: 0.7
-    })
-
-    // Social resources
-    this.resources.set('status', {
-      id: 'status',
-      type: 'social',
-      name: 'status',
-      amount: 100,
-      max_amount: 100,
-      regeneration_rate: 0,
-      scarcity: 0.7,
-      value: 0.6
-    })
-
-    this.resources.set('influence', {
-      id: 'influence',
-      type: 'social',
-      name: 'influence',
-      amount: 100,
-      max_amount: 100,
-      regeneration_rate: 0,
-      scarcity: 0.8,
-      value: 0.7
-    })
-
-    // Information resources
-    this.resources.set('knowledge', {
-      id: 'knowledge',
-      type: 'information',
-      name: 'knowledge',
-      amount: 200,
-      max_amount: 1000,
-      regeneration_rate: 2,
-      scarcity: 0.4,
-      value: 0.8
-    })
-
-    this.resources.set('secrets', {
-      id: 'secrets',
-      type: 'information',
-      name: 'secrets',
-      amount: 50,
-      max_amount: 100,
-      regeneration_rate: 1,
-      scarcity: 0.9,
-      value: 0.9
-    })
-
-    // Time resources
-    this.resources.set('attention', {
-      id: 'attention',
-      type: 'time',
-      name: 'attention',
-      amount: world.agents.npcs.length * 10,
-      max_amount: world.agents.npcs.length * 10,
-      regeneration_rate: world.agents.npcs.length * 10,
-      scarcity: 0.6,
-      value: 0.7
-    })
+    // Seed one generic resource per type so the system isn't completely empty on tick 1
+    // Names are intentionally abstract — the LLM will create world-specific ones
+    if (this.resources.size === 0) {
+      this.resources.set('material-pool', {
+        id: 'material-pool',
+        type: 'material',
+        name: 'material-pool',
+        amount: world.agents.npcs.length * 10,
+        max_amount: world.agents.npcs.length * 15,
+        regeneration_rate: world.agents.npcs.length,
+        scarcity: 0.3,
+        value: 0.7,
+      })
+      this.resources.set('social-capital', {
+        id: 'social-capital',
+        type: 'social',
+        name: 'social-capital',
+        amount: 100,
+        max_amount: 100,
+        regeneration_rate: 0,
+        scarcity: 0.6,
+        value: 0.6,
+      })
+    }
   }
   
   /**
@@ -412,39 +350,56 @@ export class ResourceCompetitionSystem {
   }
   
   /**
-   * Allocate all resources
+   * Allocate all resources — agents auto-claim by type based on their state
    */
   allocateAllResources(agents: PersonalAgentState[]): Map<string, CompetitionResult> {
     const results = new Map<string, CompetitionResult>()
-    
-    // Generate claims for each resource
+
+    // Generate claims based on agent state vs resource type (no hardcoded resource names)
     for (const agent of agents) {
-      // Claim resources based on need
-      if (agent.vitals.energy < 0.5) {
-        const strategy = this.selectStrategy(agent, this.resources.get('food')!, agents)
-        this.claimResource(agent, 'food', 10, strategy)
-      }
-      
-      if (agent.persona.agency > 0.6) {
-        const strategy = this.selectStrategy(agent, this.resources.get('status')!, agents)
-        this.claimResource(agent, 'status', 5, strategy)
-      }
-      
-      if (agent.persona.openness > 0.6) {
-        const strategy = this.selectStrategy(agent, this.resources.get('knowledge')!, agents)
-        this.claimResource(agent, 'knowledge', 8, strategy)
+      for (const [resourceId, resource] of this.resources) {
+        let shouldClaim = false
+        let amount = 5
+
+        switch (resource.type) {
+          case 'material':
+            // Low energy → need material resources
+            shouldClaim = agent.vitals.energy < 0.5
+            amount = Math.ceil((1 - agent.vitals.energy) * 10)
+            break
+          case 'social':
+            // High agency → compete for social capital
+            shouldClaim = agent.persona.agency > 0.5
+            amount = Math.ceil(agent.persona.agency * 8)
+            break
+          case 'information':
+            // High openness → seek information
+            shouldClaim = agent.persona.openness > 0.5
+            amount = Math.ceil(agent.persona.openness * 8)
+            break
+          case 'time':
+            // Everyone needs time, but stressed people need more
+            shouldClaim = agent.vitals.stress > 0.4
+            amount = Math.ceil(agent.vitals.stress * 5)
+            break
+        }
+
+        if (shouldClaim) {
+          const strategy = this.selectStrategy(agent, resource, agents)
+          this.claimResource(agent, resourceId, amount, strategy)
+        }
       }
     }
-    
+
     // Compete for each resource
-    for (const [resourceId, resource] of this.resources) {
+    for (const [resourceId] of this.resources) {
       const result = this.competeForResource(resourceId, agents)
       results.set(resourceId, result)
     }
-    
+
     // Clear claims
     this.claims = []
-    
+
     return results
   }
   

@@ -740,21 +740,22 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   const resourceResults = resourceSystem.allocateAllResources(next.agents.npcs)
   resourceSystem.regenerateResources()
 
-  // Feed resource results back into agent vitals
-  const foodResult = resourceResults.get('food')
-  if (foodResult) {
+  // Feed resource results back into agent vitals (generic: all material-type resources affect energy)
+  for (const [, result] of resourceResults) {
     for (const npc of next.agents.npcs) {
-      const allocation = foodResult.allocations.get(npc.genetics.seed) || 0
-      if (allocation > 0) {
-        // Got food → recover energy
-        npc.vitals.energy = Math.min(1, npc.vitals.energy + allocation * 0.01)
-      } else if (npc.vitals.energy < 0.5) {
-        // Didn't get food and already low → drain faster
-        npc.vitals.energy = Math.max(0, npc.vitals.energy - 0.02)
+      const allocation = result.allocations.get(npc.genetics.seed) || 0
+      // Check if this resource is material type
+      const resource = resourceSystem.getAllResources().get(result.resource_id)
+      if (resource?.type === 'material') {
+        if (allocation > 0) {
+          npc.vitals.energy = Math.min(1, npc.vitals.energy + allocation * 0.005)
+        } else if (npc.vitals.energy < 0.5 && resource.scarcity > 0.5) {
+          npc.vitals.energy = Math.max(0, npc.vitals.energy - 0.01)
+        }
       }
     }
-    // Conflicts from resource competition generate tension between involved agents
-    for (const conflict of foodResult.conflicts) {
+    // Conflicts from resource competition feed into tension
+    for (const conflict of result.conflicts) {
       if (conflict.agents.length >= 2) {
         tensionSystem.updateFromLLMFeedback(conflict.agents[0], 'building', nextTick)
       }
