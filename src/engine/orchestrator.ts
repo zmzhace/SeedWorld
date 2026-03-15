@@ -340,7 +340,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     return earlyNext
   }
 
-  // Execute Pangu agents and NPC agents in parallel
+  // Execute director agents and NPC agents in parallel
   const [directorResults, npcResults] = await Promise.all([
     options.directorRegistry.runAll(world),
     executeNpcAgents({ ...world, agents: { ...world.agents, npcs: activeNpcsForDecision } }),

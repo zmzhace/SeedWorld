@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
     console.log('Generating world with prompt:', worldPrompt)
     
-    // Call Pangu to generate initial world
+    // Generate initial world
     const world = await generateInitialWorld({ worldPrompt })
     
     // Set the world_id if provided

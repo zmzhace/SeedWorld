@@ -21,7 +21,7 @@ export default function NewWorldPage() {
       const worldRecord = createWorld({ worldPrompt: prompt })
       console.log('World record created:', worldRecord)
 
-      // Call complete initialization: Pangu + Nuwa
+      // Call complete initialization: generate world + agents
       const response = await fetch('/api/worlds/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

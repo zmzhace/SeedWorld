@@ -1,6 +1,6 @@
 import type { WorldSlice } from '@/domain/world'
 import { runWorldTick } from '@/engine/orchestrator'
-import { getDirectorRegistry } from './pangu'
+import { getDirectorRegistry } from './director-registry'
 import { createAnthropicClient, getModel, streamText } from './llm/anthropic'
 
 type ChatTurnInput = {

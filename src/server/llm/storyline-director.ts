@@ -19,24 +19,21 @@ type StoryEvent = {
 }
 
 /**
- * 分析当前世界状态，生成故事线事件
+ * Analyze current world state and generate storyline events
  */
 export async function generateStorylineEvent(world: WorldSlice): Promise<AgentPatch> {
   const client = createAnthropicClient()
 
   const model = getModel()
 
-  // 提取世界背景
   const genesisEvent = world.events.find(e => e.type === 'world_created')
   const genesisPayload = genesisEvent?.payload as any
-  
-  // 分析最近的 agent 行动
+
   const recentEvents = world.events.slice(-10)
   const agentActions = recentEvents
     .filter(e => e.type !== 'tick' && e.type !== 'world_created')
     .map(e => e.payload?.summary || e.type)
-  
-  // 分析 agents 的目标
+
   const agentGoals = world.agents.npcs.map(npc => ({
     name: npc.identity.name,
     goals: npc.goals,
@@ -96,7 +93,6 @@ Return JSON:
     // Extract JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
-      // 如果没有生成事件，返回空补丁
       return {
         timeDelta: 0,
         events: [],
@@ -108,7 +104,6 @@ Return JSON:
 
     const storyEvent: StoryEvent = JSON.parse(jsonMatch[0])
 
-    // 转换为 AgentPatch
     return {
       timeDelta: storyEvent.type === 'macro' ? 1 : 0,
       events: [
@@ -132,7 +127,6 @@ Return JSON:
     }
   } catch (error) {
     console.error('Story director error:', error)
-    // 返回空补丁，不影响世界运行
     return {
       timeDelta: 0,
       events: [],
@@ -146,13 +140,12 @@ Return JSON:
 /**
  * Apply story director event impact to the world
  */
-export function applyPanguImpact(world: WorldSlice, patch: AgentPatch): WorldSlice {
+export function applyDirectorImpact(world: WorldSlice, patch: AgentPatch): WorldSlice {
   const impact = patch.meta?.impact as StoryEvent['impact'] | undefined
   if (!impact) return world
 
   let updatedWorld = { ...world }
 
-  // 更新环境
   if (impact.environment_change) {
     updatedWorld = {
       ...updatedWorld,
@@ -162,7 +155,6 @@ export function applyPanguImpact(world: WorldSlice, patch: AgentPatch): WorldSli
     }
   }
 
-  // 添加社会压力
   if (impact.social_pressure_added) {
     updatedWorld = {
       ...updatedWorld,
@@ -176,7 +168,6 @@ export function applyPanguImpact(world: WorldSlice, patch: AgentPatch): WorldSli
     }
   }
 
-  // 更新叙事
   if (impact.narrative_shift) {
     updatedWorld = {
       ...updatedWorld,

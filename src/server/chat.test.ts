@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { handleChatTurn } from './chat'
-import { registerDirectorAgent } from './pangu'
+import { registerDirectorAgent } from './director-registry'
 import { createInitialWorldSlice } from '@/domain/world'
 
 it('returns a reply and updates the world summary after a user message', async () => {

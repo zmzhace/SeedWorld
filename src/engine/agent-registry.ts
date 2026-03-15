@@ -1,4 +1,4 @@
-import type { PanguAgent, AgentPatch } from '../domain/agents'
+import type { DirectorAgent, AgentPatch } from '../domain/agents'
 
 type AgentResult = {
   agentId: string
@@ -7,10 +7,10 @@ type AgentResult = {
 }
 
 export const createAgentRegistry = () => {
-  const agents = new Map<string, PanguAgent>()
+  const agents = new Map<string, DirectorAgent>()
 
   return {
-    register: (agent: PanguAgent) => {
+    register: (agent: DirectorAgent) => {
       if (!agent.id || !agent.run) throw new Error('invalid agent')
       agents.set(agent.id, agent)
     },

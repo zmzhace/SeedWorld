@@ -22,7 +22,7 @@ export type AgentPatch = {
   meta?: Record<string, unknown>
 }
 
-export type PanguAgent = {
+export type DirectorAgent = {
   id: string
   role: AgentRole
   run: (world: unknown) => Promise<AgentPatch> | AgentPatch
