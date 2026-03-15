@@ -466,9 +466,9 @@ Return strict JSON:
     "intensity": 0.0 to 1.0
   },
   "reasoning": "third person, why this decision (1-2 sentences)",
-  "inner_monologue": "first person inner thoughts",
-  "dialogue": "what you say out loud (omit if silent)",
-  "behavior_description": "third person, 3-5 sentences: what happened, why, and what it means — give enough context for a reader who knows nothing",
+  "inner_monologue": "first person inner thoughts — raw, emotional, contradictory",
+  "dialogue": "what you say out loud — choose the most revealing line, with subtext (omit if silent)",
+  "behavior_description": "third person, 3-5 sentences of vivid storytelling. Include: (1) a specific physical detail or micro-action that reveals intent (a glance, a pause, a hand reaching for something); (2) the emotional undercurrent — what's at stake if this fails; (3) how the power dynamic shifts. Write like a novelist, not a report.",
   "new_location": "where you are after the action (if you didn't move, use current location)",
   "effects": {
     "energy_delta": -0.1 to 0.1,
