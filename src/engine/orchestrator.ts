@@ -227,10 +227,11 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   // Initialize new systems
   const recSystem = createRecommendationSystem()
   const narrativeInfluence = new NarrativeInfluenceSystem()
-  const collectiveMemory = globalCollectiveMemory!
 
   // Hydrate global systems from world.systems (replaces old if (!global) new() pattern)
   hydrateSystemsFromWorld(world)
+
+  const collectiveMemory = globalCollectiveMemory!
 
   // Knowledge graph: restore from persisted snapshot if available, otherwise build from world state
   let knowledgeGraph: KnowledgeGraph
