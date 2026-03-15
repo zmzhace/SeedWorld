@@ -2,6 +2,9 @@
   "world_id": "world-1",
   "tick": 0,
   "time": "1970-01-01T00:00:00.000Z",
+  "config": {
+    "language": "zh"
+  },
   "environment": {
     "description": "calm"
   },
@@ -13,16 +16,17 @@
     "ambient_noise": []
   },
   "agents": {
-    "pangu": {
+    "director": {
       "kind": "world",
-      "id": "pangu-1"
+      "id": "director-1"
     },
-    "nuwa": {
+    "creator": {
       "kind": "persona",
-      "id": "nuwa-1"
+      "id": "creator-1"
     },
     "personal": {
       "kind": "personal",
+      "life_status": "alive",
       "genetics": {
         "seed": "default-user"
       },
@@ -56,9 +60,23 @@
     "social": {
       "kind": "social",
       "id": "social-1"
+    },
+    "npcs": []
+  },
+  "narratives": {
+    "patterns": [],
+    "arcs": [],
+    "summaries": [],
+    "stats": {
+      "total_patterns": 0,
+      "active_patterns": 0,
+      "concluded_patterns": 0,
+      "total_arcs": 0,
+      "completed_arcs": 0
     }
   },
   "events": [],
   "relations": {},
-  "active_hooks": []
+  "active_hooks": [],
+  "systems": {}
 }

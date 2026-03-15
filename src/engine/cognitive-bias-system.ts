@@ -479,4 +479,19 @@ export class CognitiveBiasSystem {
   getPerceivedBiases(agentId: string): { bias: string; tick: number }[] {
     return this.perceivedBiases.get(agentId) || []
   }
+
+  toSnapshot(): { perceivedBiases: Record<string, { bias: string; tick: number }[]> } {
+    const perceivedBiases: Record<string, { bias: string; tick: number }[]> = {}
+    for (const [agentId, entries] of this.perceivedBiases) {
+      perceivedBiases[agentId] = entries
+    }
+    return { perceivedBiases }
+  }
+
+  fromSnapshot(snapshot: { perceivedBiases: Record<string, { bias: string; tick: number }[]> }): void {
+    this.perceivedBiases.clear()
+    for (const [agentId, entries] of Object.entries(snapshot.perceivedBiases)) {
+      this.perceivedBiases.set(agentId, entries)
+    }
+  }
 }

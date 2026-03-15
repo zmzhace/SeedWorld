@@ -370,6 +370,7 @@ export class StoryArcDetector {
   
   /**
    * 生成故事弧标题
+   * Language-agnostic: uses the English narrative type directly
    */
   private generateArcTitle(
     patterns: NarrativePattern[],
@@ -377,33 +378,18 @@ export class StoryArcDetector {
   ): string {
     // 基于主要叙事类型和主角
     const typeCount = new Map<string, number>()
-    
+
     for (const pattern of patterns) {
       typeCount.set(pattern.type, (typeCount.get(pattern.type) || 0) + 1)
     }
-    
+
     // 找到最常见的类型
     const mainType = Array.from(typeCount.entries())
       .sort((a, b) => b[1] - a[1])[0]?.[0] || 'story'
-    
-    // 生成标题
-    const typeNames: Record<string, string> = {
-      conflict: '冲突',
-      alliance: '联盟',
-      romance: '浪漫',
-      betrayal: '背叛',
-      discovery: '发现',
-      transformation: '转变',
-      quest: '探索',
-      mystery: '谜团',
-      tragedy: '悲剧',
-      triumph: '胜利'
-    }
-    
-    const typeName = typeNames[mainType] || '故事'
+
     const protagonistName = protagonists[0] || 'Unknown'
-    
-    return `${protagonistName}的${typeName}`
+
+    return `${protagonistName} — ${mainType}`
   }
   
   /**

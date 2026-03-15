@@ -45,6 +45,7 @@ let globalRoleSystem: SocialRoleSystem | null = null
 let globalMemeSystem: MemePropagationSystem | null = null
 let globalMemorySystems: Map<string, HierarchicalMemorySystem> = new Map()
 let globalAttentionMechanism: AttentionMechanism | null = null
+let globalCollectiveMemory: CollectiveMemorySystem | null = null
 
 /**
  * Hydrate global system singletons from world.systems
@@ -58,8 +59,11 @@ function hydrateSystemsFromWorld(world: WorldSlice): void {
     globalReputationSystem.fromSnapshot(sys.reputation)
   }
 
-  // Cognitive bias (stateless, just new each time)
+  // Cognitive bias
   globalBiasSystem = new CognitiveBiasSystem()
+  if (sys.cognitive_bias) {
+    globalBiasSystem.fromSnapshot(sys.cognitive_bias)
+  }
 
   // Resource competition
   globalResourceSystem = new ResourceCompetitionSystem()
@@ -98,6 +102,23 @@ function hydrateSystemsFromWorld(world: WorldSlice): void {
   if (sys.attention) {
     globalAttentionMechanism.fromSnapshot(sys.attention)
   }
+
+  // Collective memory
+  globalCollectiveMemory = new CollectiveMemorySystem()
+  if (sys.collective_memory) {
+    globalCollectiveMemory.fromSnapshot(sys.collective_memory)
+  }
+
+  // Hierarchical memory (per-agent, stored as Record<seed, snapshot>)
+  if (sys.hierarchical_memory) {
+    const hmData = sys.hierarchical_memory as Record<string, any>
+    globalMemorySystems = new Map()
+    for (const [seed, snapshot] of Object.entries(hmData)) {
+      const memSys = new HierarchicalMemorySystem()
+      memSys.fromSnapshot(snapshot)
+      globalMemorySystems.set(seed, memSys)
+    }
+  }
 }
 
 /**
@@ -113,6 +134,15 @@ function exportSystemsState(knowledgeGraph: KnowledgeGraph): SystemsState {
     memes: globalMemeSystem!.toSnapshot(),
     attention: globalAttentionMechanism!.toSnapshot(),
     knowledge_graph: knowledgeGraph.toJSON(),
+    cognitive_bias: globalBiasSystem!.toSnapshot(),
+    collective_memory: globalCollectiveMemory!.toSnapshot(),
+    hierarchical_memory: (() => {
+      const hm: Record<string, any> = {}
+      for (const [seed, sys] of globalMemorySystems) {
+        hm[seed] = sys.toSnapshot()
+      }
+      return hm
+    })(),
   }
 }
 
@@ -197,7 +227,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   // Initialize new systems
   const recSystem = createRecommendationSystem()
   const narrativeInfluence = new NarrativeInfluenceSystem()
-  const collectiveMemory = new CollectiveMemorySystem()
+  const collectiveMemory = globalCollectiveMemory!
 
   // Hydrate global systems from world.systems (replaces old if (!global) new() pattern)
   hydrateSystemsFromWorld(world)

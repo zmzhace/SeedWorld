@@ -191,13 +191,40 @@ export class ReputationSystem {
     event: ReputationEvent,
     witnesses: string[]
   ): void {
+    const decayFactor = 0.3
+
     // Witnesses propagate to their friends
     for (const witness of witnesses) {
       const friends = this.socialNetwork.get(witness) || new Set()
-      
+
       // Propagate to friends (with decay)
       for (const friend of friends) {
-        // Simplified: record directly, could extend to second-hand "hearsay" info
+        // Don't propagate back to the original agent or to other witnesses
+        if (friend === agentId || witnesses.includes(friend)) continue
+
+        let reputation = this.reputations.get(agentId)
+        if (!reputation) continue
+
+        // Apply decayed impact
+        const decayedImpact: Partial<ReputationDimension> = {}
+        for (const [dim, delta] of Object.entries(event.impact)) {
+          if (typeof delta === 'number') {
+            const decayedDelta = delta * decayFactor
+            const safeDim = dim as keyof ReputationDimension
+            reputation[safeDim] = this.clamp(reputation[safeDim] + decayedDelta)
+            decayedImpact[safeDim] = decayedDelta
+          }
+        }
+
+        // Record hearsay event
+        const hearsayEvent: ReputationEvent = {
+          tick: event.tick,
+          action_type: 'hearsay',
+          impact: decayedImpact,
+          witnesses: [friend],
+          description: `Heard from others: ${event.description}`,
+        }
+        reputation.history.push(hearsayEvent)
       }
     }
   }

@@ -49,12 +49,12 @@ export class EmergentPropertyDetector {
 
     const newProperties: EmergentProperty[] = []
 
-    // 1. Detect phase transitions
-    const phaseTransitions = this.detectPhaseTransition(world, history)
+    // 1. Detect phase transitions (use internal historyWindow, not the external history param)
+    const phaseTransitions = this.detectPhaseTransition(world, this.historyWindow)
     newProperties.push(...phaseTransitions)
 
-    // 2. Detect critical points
-    const criticalPoints = this.detectCriticalPoint(world, history)
+    // 2. Detect critical points (use internal historyWindow, not the external history param)
+    const criticalPoints = this.detectCriticalPoint(world, this.historyWindow)
     newProperties.push(...criticalPoints)
 
     // 3. Detect self-organization

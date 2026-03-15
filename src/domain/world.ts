@@ -154,6 +154,9 @@ export type SystemsState = {
   memes?: MemeSnapshot
   attention?: AttentionSnapshot
   knowledge_graph?: KnowledgeGraphSnapshot
+  cognitive_bias?: any
+  collective_memory?: any
+  hierarchical_memory?: any
 }
 
 export type WorldConfig = {

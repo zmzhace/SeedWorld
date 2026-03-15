@@ -76,7 +76,7 @@ export class HierarchicalMemorySystem {
     for (const mem of agent.memory_long) {
       const ltm: LongTermMemory = {
         ...mem,
-        schema_tags: this.extractTags(mem.content),
+        schema_tags: this.extractTags(mem.content, mem),
         semantic_links: [],
         consolidation_level: 0.8
       }
@@ -176,7 +176,7 @@ export class HierarchicalMemorySystem {
       timestamp: stm.timestamp,
       decay_rate: 0.01,  // 长期记忆衰减慢
       retrieval_strength: stm.retrieval_strength * 0.8,
-      schema_tags: this.extractTags(stm.content),
+      schema_tags: this.extractTags(stm.content, stm),
       semantic_links: this.findSemanticLinks(stm.content),
       consolidation_level: stm.consolidation_score
     }
@@ -303,23 +303,44 @@ export class HierarchicalMemorySystem {
   
   /**
    * 提取标签
+   * Language-agnostic: generates tags from structured memory fields
+   * instead of matching content against language-specific keywords
    */
-  private extractTags(content: string): string[] {
+  private extractTags(
+    _content: string,
+    memory?: { source?: string; importance?: number; emotional_weight?: number }
+  ): string[] {
     const tags: string[] = []
-    
-    // 简单的关键词提取
-    const keywords = [
-      '冲突', '合作', '帮助', '竞争', '学习', '创造',
-      '友谊', '敌对', '成功', '失败', '快乐', '悲伤',
-      '目标', '计划', '决策', '行动'
-    ]
-    
-    for (const keyword of keywords) {
-      if (content.includes(keyword)) {
-        tags.push(keyword)
+
+    if (memory) {
+      // Tag based on source field
+      if (memory.source) {
+        tags.push(memory.source)
+      }
+
+      // Tag based on emotional weight
+      if (memory.emotional_weight !== undefined) {
+        if (Math.abs(memory.emotional_weight) > 0.5) {
+          tags.push('emotional')
+        }
+        if (memory.emotional_weight > 0.3) {
+          tags.push('positive')
+        } else if (memory.emotional_weight < -0.3) {
+          tags.push('negative')
+        }
+      }
+
+      // Tag based on importance
+      if (memory.importance !== undefined) {
+        if (memory.importance > 0.7) {
+          tags.push('important')
+        }
+        if (memory.importance > 0.9) {
+          tags.push('critical')
+        }
       }
     }
-    
+
     return tags
   }
   
@@ -534,6 +555,62 @@ export class HierarchicalMemorySystem {
         unique_tags: this.memoryIndex.by_tag.size,
         time_periods: this.memoryIndex.by_time.size
       }
+    }
+  }
+
+  /**
+   * Serialize all internal state to a snapshot
+   */
+  toSnapshot(): {
+    workingMemory: Array<[string, WorkingMemory]>
+    shortTermMemory: Array<[string, ShortTermMemory]>
+    longTermMemory: Array<[string, LongTermMemory]>
+    memoryIndex: {
+      by_importance: Array<[number, string[]]>
+      by_emotion: Array<[string, string[]]>
+      by_source: Array<[string, string[]]>
+      by_tag: Array<[string, string[]]>
+      by_time: Array<[number, string[]]>
+    }
+  } {
+    return {
+      workingMemory: Array.from(this.workingMemory.entries()),
+      shortTermMemory: Array.from(this.shortTermMemory.entries()),
+      longTermMemory: Array.from(this.longTermMemory.entries()),
+      memoryIndex: {
+        by_importance: Array.from(this.memoryIndex.by_importance.entries()),
+        by_emotion: Array.from(this.memoryIndex.by_emotion.entries()),
+        by_source: Array.from(this.memoryIndex.by_source.entries()),
+        by_tag: Array.from(this.memoryIndex.by_tag.entries()),
+        by_time: Array.from(this.memoryIndex.by_time.entries())
+      }
+    }
+  }
+
+  /**
+   * Restore internal state from a snapshot
+   */
+  fromSnapshot(snapshot: {
+    workingMemory: Array<[string, WorkingMemory]>
+    shortTermMemory: Array<[string, ShortTermMemory]>
+    longTermMemory: Array<[string, LongTermMemory]>
+    memoryIndex: {
+      by_importance: Array<[number, string[]]>
+      by_emotion: Array<[string, string[]]>
+      by_source: Array<[string, string[]]>
+      by_tag: Array<[string, string[]]>
+      by_time: Array<[number, string[]]>
+    }
+  }): void {
+    this.workingMemory = new Map(snapshot.workingMemory)
+    this.shortTermMemory = new Map(snapshot.shortTermMemory)
+    this.longTermMemory = new Map(snapshot.longTermMemory)
+    this.memoryIndex = {
+      by_importance: new Map(snapshot.memoryIndex.by_importance),
+      by_emotion: new Map(snapshot.memoryIndex.by_emotion),
+      by_source: new Map(snapshot.memoryIndex.by_source),
+      by_tag: new Map(snapshot.memoryIndex.by_tag),
+      by_time: new Map(snapshot.memoryIndex.by_time)
     }
   }
 }

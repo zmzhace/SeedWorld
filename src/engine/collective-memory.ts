@@ -149,8 +149,9 @@ export class CollectiveMemorySystem {
     const avgImportance = group.reduce((sum, g) => sum + g.memory.importance, 0) / group.length
     const strength = Math.min(1, (participants.length / 10) * avgImportance)
     
-    // 判断记忆类型
-    const type = this.classifyMemoryType(synthesizedContent)
+    // 判断记忆类型（使用第一个记忆的 source 和 emotional_weight）
+    const firstMemory = group[0].memory
+    const type = this.classifyMemoryType(synthesizedContent, firstMemory.source, firstMemory.emotional_weight)
     
     return {
       id: `collective-${currentTick}-${Math.random().toString(36).substr(2, 9)}`,
@@ -180,18 +181,22 @@ export class CollectiveMemorySystem {
   
   /**
    * 分类记忆类型
+   * Language-agnostic: uses source field and emotional_weight instead of keyword matching
    */
-  private classifyMemoryType(content: string): CollectiveMemory['type'] {
-    const lowerContent = content.toLowerCase()
-    
-    if (lowerContent.includes('应该') || lowerContent.includes('不应该') || lowerContent.includes('规则')) {
-      return 'norm'  // 社会规范
-    } else if (lowerContent.includes('相信') || lowerContent.includes('认为') || lowerContent.includes('价值')) {
-      return 'belief'  // 信念
-    } else if (lowerContent.includes('那次') || lowerContent.includes('历史') || lowerContent.includes('过去')) {
-      return 'history'  // 历史事件
+  private classifyMemoryType(
+    _content: string,
+    source?: MemoryRecord['source'],
+    emotionalWeight?: number
+  ): CollectiveMemory['type'] {
+    // Classify based on structured fields rather than content keywords
+    if (source === 'social') {
+      return 'norm'
+    } else if (source === 'self') {
+      return 'belief'
+    } else if (source === 'world' && (emotionalWeight === undefined || Math.abs(emotionalWeight) < 0.3)) {
+      return 'history'
     } else {
-      return 'event'  // 普通事件
+      return 'event'
     }
   }
   
@@ -209,7 +214,7 @@ export class CollectiveMemorySystem {
         // 创建个体记忆
         const individualMemory: MemoryRecord = {
           id: `propagated-${memory.id}-${agent.genetics.seed}`,
-          content: `（群体记忆）${memory.content}`,
+          content: `collective memory: ${memory.content}`,
           importance: memory.strength * 0.8,
           emotional_weight: 0,
           source: 'social',
@@ -275,7 +280,7 @@ export class CollectiveMemorySystem {
     memory.evolution_history.push({
       tick: currentTick,
       content: memory.content,
-      reason: '强化'
+      reason: 'reinforced'
     })
     
     return memory
@@ -310,7 +315,7 @@ export class CollectiveMemorySystem {
       memory.evolution_history.push({
         tick: currentTick,
         content: memory.content,
-        reason: '基于新事件演化'
+        reason: 'evolved based on new events'
       })
       
       memory.content = newContent
@@ -367,17 +372,12 @@ export class CollectiveMemorySystem {
   
   /**
    * 判断行动是否违反规范
+   * Language-agnostic: compares action/norm content similarity instead of keyword matching
    */
   private isActionViolatingNorm(action: string, normDescription: string): boolean {
-    // 简化：检查是否包含"不应该"的内容
-    if (normDescription.includes('不应该')) {
-      const forbidden = normDescription.split('不应该')[1]?.trim()
-      if (forbidden && action.toLowerCase().includes(forbidden.toLowerCase())) {
-        return true
-      }
-    }
-    
-    return false
+    // Use content similarity to determine if an action conflicts with a norm
+    const similarity = this.calculateMemorySimilarity(action, normDescription)
+    return similarity > 0.4
   }
   
   /**
@@ -400,7 +400,7 @@ export class CollectiveMemorySystem {
   getStats() {
     const memories = this.getAllCollectiveMemories()
     const norms = this.getAllCulturalNorms()
-    
+
     return {
       total_memories: memories.length,
       strong_memories: memories.filter(m => m.strength > 0.7).length,
@@ -414,5 +414,29 @@ export class CollectiveMemorySystem {
         history: memories.filter(m => m.type === 'history').length
       }
     }
+  }
+
+  /**
+   * Serialize all internal state to a snapshot
+   */
+  toSnapshot(): {
+    collectiveMemories: Array<[string, CollectiveMemory]>
+    culturalNorms: Array<[string, CulturalNorm]>
+  } {
+    return {
+      collectiveMemories: Array.from(this.collectiveMemories.entries()),
+      culturalNorms: Array.from(this.culturalNorms.entries())
+    }
+  }
+
+  /**
+   * Restore internal state from a snapshot
+   */
+  fromSnapshot(snapshot: {
+    collectiveMemories: Array<[string, CollectiveMemory]>
+    culturalNorms: Array<[string, CulturalNorm]>
+  }): void {
+    this.collectiveMemories = new Map(snapshot.collectiveMemories)
+    this.culturalNorms = new Map(snapshot.culturalNorms)
   }
 }

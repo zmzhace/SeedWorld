@@ -134,6 +134,27 @@ function buildAgentPrompt(agent: PersonalAgentState, world: WorldSlice): string 
     ...strangers.slice(0, 5).map(a => buildAgentInfo(a, 'vague')),
   ].join('\n')
 
+  // Knowledge graph connections
+  let connectionsSection = ''
+  if (world.systems?.knowledge_graph) {
+    const kgData = world.systems.knowledge_graph as { nodes: any[]; edges: any[] }
+    // Find edges involving this agent
+    const myEdges = (kgData.edges || [])
+      .filter((e: any) => e.source === agent.genetics.seed || e.target === agent.genetics.seed)
+      .filter((e: any) => e.relation !== 'located_in' && e.relation !== 'knows') // skip trivial
+      .slice(0, 5)
+
+    if (myEdges.length > 0) {
+      const connections = myEdges.map((e: any) => {
+        const otherId = e.source === agent.genetics.seed ? e.target : e.source
+        const otherNode = (kgData.nodes || []).find((n: any) => n.id === otherId)
+        const otherName = otherNode?.label || otherId
+        return `- ${e.relation}: ${otherName}`
+      })
+      connectionsSection = `\n## Connections\n${connections.join('\n')}`
+    }
+  }
+
   // Event visibility
   const knownSeeds = new Set([
     agent.genetics.seed,
@@ -418,7 +439,7 @@ ${agent.last_dialogue ? `Just said: "${agent.last_dialogue}"` : ''}
 
 ## People you know
 ${knownPeople || 'You do not know anyone'}
-
+${connectionsSection}
 ## What you remember
 ${recentMemories || 'Your mind is blank'}
 
