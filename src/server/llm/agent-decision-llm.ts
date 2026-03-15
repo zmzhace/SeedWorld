@@ -367,17 +367,20 @@ ${systemSection}${whispersSection}${roleModelsSection}
 
 Now, as "${agent.identity.name}", based on your personality, beliefs, situation, and desires, freely decide what to do next.
 
-**Spatial rules (extremely important):**
+**Spatial rules:**
 - You are currently at "${myLocation}"${colocated.length > 0 ? `, with ${colocatedNames} nearby` : ''}
 - You can only interact face-to-face with people at the **same location**
-- If the person you want to find is not nearby, you must **move** to their location first — this turn you can only be on the way, you will meet them next turn
-- You can also do things that don't require others: practice alone, research, craft, think, set traps, etc.
-- Do not magically appear in front of someone — movement takes time
+- If the person you want to find is not nearby, you must **move** — but only say where you're going, don't narrate the walk
 
-**Behavior requirements:**
-- Make specific, dramatic decisions that fit your character
-- behavior_description must follow spatial logic: describe the scene where you actually are
-- Do not write "walk up to someone" unless that person is actually beside you
+**What makes a GOOD action:**
+${colocated.length > 0 ? `- People are right here! **Talk to them, argue, negotiate, confront, flirt, scheme, teach, fight.** Do NOT just walk past them.
+- Have a real conversation. Say something specific and meaningful, not generic pleasantries.
+- If you have conflicting goals with someone nearby, address it NOW.` : `- You're alone. Do something concrete: practice a skill, investigate something, craft, set a trap, search for resources, meditate on a plan.`}
+- **NEVER** just "walk along a path" or "observe the scenery" — that's boring. DO something.
+- **NEVER** repeat what you did last turn. Try something new.
+- Your action should advance at least one of your goals.
+- behavior_description: 1-2 short sentences about what you DID, not scenic prose. Focus on action, not atmosphere.
+- dialogue: if people are around, you SHOULD speak. Real words, not silence.
 
 Return strict JSON:
 {
@@ -389,7 +392,7 @@ Return strict JSON:
   "reasoning": "third person, why this decision (1-2 sentences)",
   "inner_monologue": "first person inner thoughts",
   "dialogue": "what you say out loud (omit if silent)",
-  "behavior_description": "third person, describe what you did (2-3 sentences, must match your current location)",
+  "behavior_description": "1-2 short sentences: what you DID (action-focused, not scenic)",
   "new_location": "where you are after the action (if you didn't move, use current location)",
   "effects": {
     "energy_delta": -0.1 to 0.1,
