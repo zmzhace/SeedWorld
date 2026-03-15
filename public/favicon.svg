@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Globe circle -->
+  <circle cx="16" cy="12" r="9" stroke="#2563EB" stroke-width="2" fill="none"/>
+
+  <!-- Stem -->
+  <line x1="16" y1="29" x2="16" y2="21" stroke="#22C55E" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Left leaf -->
+  <path d="M16 17 Q11 11 12.5 7" stroke="#22C55E" stroke-width="2" stroke-linecap="round" fill="none"/>
+
+  <!-- Right leaf -->
+  <path d="M16 17 Q21 11 19.5 7" stroke="#22C55E" stroke-width="2" stroke-linecap="round" fill="none"/>
+
+  <!-- Seed -->
+  <ellipse cx="16" cy="29.5" rx="2.5" ry="1.8" fill="#F97316"/>
+</svg>

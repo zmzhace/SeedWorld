@@ -1,8 +1,12 @@
 <div align="center">
 
-# World Slice
+<img src="public/logo.svg" width="80" height="80" alt="Seedworld" />
 
-**给 LLM 一个世界设定，看它自己长出文明**
+# Seedworld
+
+**Plant a world. Watch it grow.**
+
+给 LLM 一个世界设定，看它自己长出文明
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
@@ -16,7 +20,7 @@
 
 ## What Is This?
 
-World Slice is an emergent world simulation engine. You describe a world, it generates characters with personalities, desires, and grudges — and then you let go.
+Seedworld is an emergent world simulation engine. You describe a world, it generates characters with personalities, desires, and grudges — and then you let go.
 
 No pre-written scripts. No behavior trees. Characters make their own decisions based on who they are, what they want, and who wronged them. Stories grow from chaos, all on their own.
 
@@ -264,8 +268,8 @@ app/
 
 <div align="center">
 
-**World Slice** — We don't write stories. We plant them.
+**Seedworld** — We don't write stories. We plant them.
 
-[Back to top](#world-slice)
+[Back to top](#seedworld)
 
 </div>

@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Scroll,
   BarChart3,
+  Pencil,
 } from 'lucide-react'
 
 const TABS = [
@@ -57,6 +58,27 @@ export default function WorldDetailPage() {
   const [advancing, setAdvancing] = React.useState(false)
   const [autoAdvancing, setAutoAdvancing] = React.useState(false)
   const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10)
+
+  // Inline editing state for title and summary
+  const [editingTitle, setEditingTitle] = React.useState(false)
+  const [editingSummary, setEditingSummary] = React.useState(false)
+  const [titleValue, setTitleValue] = React.useState('')
+  const [summaryValue, setSummaryValue] = React.useState('')
+
+  // Sync editing values when world loads or changes
+  React.useEffect(() => {
+    if (world) {
+      setTitleValue(world.title || '')
+      setSummaryValue(world.summary || '')
+    }
+  }, [world?.title, world?.summary])
+
+  const saveWorldField = (field: 'title' | 'summary', value: string) => {
+    if (!world) return
+    const updated = { ...world, [field]: value }
+    setWorld(updated)
+    localStorage.setItem(`world_${worldId}`, JSON.stringify(updated))
+  }
 
   React.useEffect(() => {
     setWorldRecord(getWorld(worldId))
@@ -188,12 +210,64 @@ export default function WorldDetailPage() {
               <div className="h-6 w-px bg-slate-200" />
 
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold text-slate-800">
-                  {world?.title || 'World Slice'}
-                </h1>
-                <p className="truncate text-xs text-slate-500 max-w-[260px]">
-                  {worldRecord.worldPrompt}
-                </p>
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    value={titleValue}
+                    onChange={(e) => setTitleValue(e.target.value)}
+                    onBlur={() => {
+                      setEditingTitle(false)
+                      saveWorldField('title', titleValue)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setEditingTitle(false)
+                        saveWorldField('title', titleValue)
+                      } else if (e.key === 'Escape') {
+                        setEditingTitle(false)
+                        setTitleValue(world?.title || '')
+                      }
+                    }}
+                    className="w-full truncate text-lg font-bold text-slate-800 bg-transparent border-b border-blue-400 outline-none px-0 py-0"
+                  />
+                ) : (
+                  <h1
+                    className="group/title flex items-center gap-1.5 truncate text-lg font-bold text-slate-800 cursor-pointer"
+                    onClick={() => setEditingTitle(true)}
+                  >
+                    <span className="truncate">{world?.title || 'World Slice'}</span>
+                    <Pencil className="h-3.5 w-3.5 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
+                  </h1>
+                )}
+                {editingSummary ? (
+                  <input
+                    autoFocus
+                    value={summaryValue}
+                    onChange={(e) => setSummaryValue(e.target.value)}
+                    onBlur={() => {
+                      setEditingSummary(false)
+                      saveWorldField('summary', summaryValue)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setEditingSummary(false)
+                        saveWorldField('summary', summaryValue)
+                      } else if (e.key === 'Escape') {
+                        setEditingSummary(false)
+                        setSummaryValue(world?.summary || '')
+                      }
+                    }}
+                    className="w-full truncate text-xs text-slate-500 bg-transparent border-b border-blue-400 outline-none px-0 py-0 mt-0.5 max-w-[260px]"
+                  />
+                ) : (
+                  <p
+                    className="group/summary flex items-center gap-1 truncate text-xs text-slate-500 max-w-[260px] cursor-pointer mt-0.5"
+                    onClick={() => setEditingSummary(true)}
+                  >
+                    <span className="truncate">{world?.summary || worldRecord.worldPrompt}</span>
+                    <Pencil className="h-3 w-3 text-slate-300 opacity-0 group-hover/summary:opacity-100 transition-opacity shrink-0" />
+                  </p>
+                )}
               </div>
             </div>
 

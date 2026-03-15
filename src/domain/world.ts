@@ -171,6 +171,7 @@ export type WorldConfig = {
 export type WorldSlice = {
   world_id: string
   title?: string  // LLM-generated world title
+  summary?: string  // LLM-generated short tagline (1-2 sentences)
   tick: number
   time: string
   config: WorldConfig
@@ -197,6 +198,7 @@ export function createInitialWorldSlice(): WorldSlice {
   return {
     world_id: 'world-1',
     title: undefined,
+    summary: undefined,
     tick: 0,
     time: new Date(0).toISOString(),
     config: {

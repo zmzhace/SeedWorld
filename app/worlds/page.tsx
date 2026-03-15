@@ -93,7 +93,7 @@ export default function WorldsPage() {
                     </h3>
                     {world.worldSnapshot?.title && (
                       <p className="mt-1 text-xs text-slate-500 line-clamp-1">
-                        {world.worldPrompt}
+                        {world.worldSnapshot?.summary || world.worldPrompt}
                       </p>
                     )}
                   </div>
