@@ -1,6 +1,7 @@
 import type { PersonalAgentState, WorldSlice } from '@/domain/world'
 import { createAnthropicClient, getModel, streamText } from './anthropic'
 import { extractWorldKnowledge } from '@/engine/world-knowledge'
+import type { ConversationRound } from '../../domain/conversation'
 
 /**
  * LLM Agent decision result - fully LLM-driven, no fixed action types
@@ -37,13 +38,14 @@ export type LLMDecisionResult = {
     goal_progress?: string
   }
   system_feedback?: SystemFeedback
+  continue_conversation?: boolean
 }
 
 /**
  * Build the full context prompt for an agent
  * Information fog of war + spatial awareness + system output injection
  */
-function buildAgentPrompt(agent: PersonalAgentState, world: WorldSlice): string {
+export function buildAgentPrompt(agent: PersonalAgentState, world: WorldSlice): string {
   const knowledge = extractWorldKnowledge(world)
 
   // === Location system ===
@@ -499,7 +501,7 @@ Return only JSON, nothing else.`
 /**
  * Parse LLM JSON response
  */
-function parseLLMResponse(responseText: string): LLMDecisionResult | null {
+export function parseLLMResponse(responseText: string): LLMDecisionResult | null {
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return null
@@ -534,6 +536,7 @@ function parseLLMResponse(responseText: string): LLMDecisionResult | null {
         goal_progress: effects.goal_progress || undefined,
       },
       system_feedback: parseSystemFeedback(parsed.system_feedback),
+      continue_conversation: parsed.continue_conversation ?? true,
     }
   } catch {
     return null
@@ -602,6 +605,76 @@ function parseSystemFeedback(raw: unknown): SystemFeedback | undefined {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v))
+}
+
+/**
+ * Build a conversation-mode prompt for an agent
+ * Extends the base agent prompt with conversation transcript and pressure context
+ */
+export function buildConversationPrompt(
+  agent: PersonalAgentState,
+  world: WorldSlice,
+  conversationHistory: Array<{ speaker: string; dialogue: string; action: { type: string; intensity: number } }>,
+  trigger: { type: string; description: string },
+): string {
+  const basePrompt = buildAgentPrompt(agent, world)
+
+  let transcript = ''
+  if (conversationHistory.length > 0) {
+    transcript = '\n\n[Conversation so far]\n'
+    for (const round of conversationHistory) {
+      transcript += `${round.speaker} said: "${round.dialogue}" (${round.action.type}, intensity ${round.action.intensity})\n`
+    }
+    transcript += '\nYou must respond to what was just said. Continue the conversation naturally.\n'
+  }
+
+  const pressureContext = `\n\n[What draws you into this interaction]\n${trigger.description}\n`
+
+  const schemaMarker = '---\n\nNow, as'
+  const parts = basePrompt.split(schemaMarker)
+
+  let modifiedSchema = parts.length > 1 ? parts[1] : ''
+  modifiedSchema = modifiedSchema.replace(
+    '"system_feedback"',
+    `"continue_conversation": true,\n    "system_feedback"`,
+  )
+
+  if (parts.length > 1) {
+    return parts[0] + pressureContext + transcript + schemaMarker + modifiedSchema
+  }
+  return basePrompt + pressureContext + transcript
+}
+
+/**
+ * Generate a single conversation turn for an agent via LLM
+ */
+export async function generateConversationTurn(
+  agent: PersonalAgentState,
+  world: WorldSlice,
+  conversationHistory: ConversationRound[],
+  trigger: { type: string; description: string },
+): Promise<LLMDecisionResult | null> {
+  try {
+    const visibleHistory = conversationHistory.map(r => ({
+      speaker: r.speaker,
+      dialogue: r.dialogue,
+      action: r.action,
+    }))
+    const prompt = buildConversationPrompt(agent, world, visibleHistory, trigger)
+
+    const client = createAnthropicClient()
+    const model = getModel()
+    const responseText = await streamText(client, {
+      model,
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    })
+
+    if (!responseText?.trim()) return null
+    return parseLLMResponse(responseText)
+  } catch {
+    return null
+  }
 }
 
 /**
