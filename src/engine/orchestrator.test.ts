@@ -7,7 +7,7 @@ import * as triggers from './snapshot-triggers'
 // Mock SnapshotManager
 vi.mock('./snapshot-manager', () => ({
   SnapshotManager: vi.fn().mockImplementation(() => ({
-    createSnapshot: vi.fn(),
+    createSnapshot: vi.fn().mockResolvedValue({}),
     listSnapshots: vi.fn().mockReturnValue([]),
     deleteSnapshot: vi.fn(),
   })),
