@@ -344,4 +344,117 @@ describe('SnapshotManager', () => {
       }).toThrow('Snapshot not found');
     });
   });
+
+  describe('restoreSnapshot', () => {
+    let mockWorld: WorldSlice;
+
+    beforeEach(() => {
+      mockWorld = {
+        world_id: worldId,
+        tick: 42,
+        time: '2026-03-16T10:00:00Z',
+        config: { language: 'en' },
+        environment: { description: 'Test world' },
+        social_context: {
+          macro_events: [],
+          narratives: [],
+          pressures: [],
+          institutions: [],
+          ambient_noise: [],
+        },
+        agents: {
+          director: { kind: 'world', id: 'director-1' },
+          creator: { kind: 'persona', id: 'creator-1' },
+          personal: {
+            kind: 'personal',
+            genetics: { seed: 'seed-1' },
+            identity: { name: 'Player' },
+            memory_short: [],
+            memory_long: [],
+            vitals: { energy: 1, stress: 0, sleep_debt: 0, focus: 1, aging_index: 0 },
+            emotion: { label: 'neutral', intensity: 0.5 },
+            persona: { openness: 0.5, stability: 0.5, attachment: 0.5, agency: 0.5, empathy: 0.5 },
+            goals: [],
+            relations: {},
+            action_history: [],
+            life_status: 'alive',
+          },
+          social: { kind: 'social', id: 'social-1' },
+          npcs: [],
+        },
+        narratives: { patterns: [], counter: 0 },
+        events: [],
+        relations: {},
+        active_hooks: [],
+        systems: {},
+      } as WorldSlice;
+    });
+
+    it('should return WorldSlice when snapshot exists and is valid', () => {
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(mockWorld));
+
+      const result = manager.restoreSnapshot('snap-123');
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual(mockWorld);
+      expect(result?.tick).toBe(42);
+      expect(result?.agents).toBeDefined();
+      expect(result?.config).toBeDefined();
+    });
+
+    it('should return null when snapshot does not exist', () => {
+      vi.mocked(global.localStorage.getItem).mockReturnValue(null);
+
+      const result = manager.restoreSnapshot('snap-nonexistent');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when snapshot data is malformed JSON', () => {
+      vi.mocked(global.localStorage.getItem).mockReturnValue('invalid json');
+
+      const result = manager.restoreSnapshot('snap-invalid');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when snapshot data is missing required fields', () => {
+      const invalidWorld = { tick: 42 }; // Missing agents, config
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(invalidWorld));
+
+      const result = manager.restoreSnapshot('snap-incomplete');
+
+      expect(result).toBeNull();
+    });
+
+    it('should validate that restored world has tick field', () => {
+      const worldWithoutTick = { ...mockWorld };
+      delete (worldWithoutTick as any).tick;
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(worldWithoutTick));
+
+      const result = manager.restoreSnapshot('snap-no-tick');
+
+      expect(result).toBeNull();
+    });
+
+    it('should validate that restored world has agents field', () => {
+      const worldWithoutAgents = { ...mockWorld };
+      delete (worldWithoutAgents as any).agents;
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(worldWithoutAgents));
+
+      const result = manager.restoreSnapshot('snap-no-agents');
+
+      expect(result).toBeNull();
+    });
+
+    it('should validate that restored world has config field', () => {
+      const worldWithoutConfig = { ...mockWorld };
+      delete (worldWithoutConfig as any).config;
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(worldWithoutConfig));
+
+      const result = manager.restoreSnapshot('snap-no-config');
+
+      expect(result).toBeNull();
+    });
+  });
 });

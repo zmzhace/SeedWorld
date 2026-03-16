@@ -1,6 +1,6 @@
 import type { WorldSlice } from '../domain/world';
 import type { SnapshotMetadata, SnapshotTrigger, WorldSnapshot } from '../domain/snapshot';
-import { saveMetadata, saveFullState, loadMetadata, deleteSnapshot as deleteSnapshotStorage } from './snapshot-storage';
+import { saveMetadata, saveFullState, loadMetadata, deleteSnapshot as deleteSnapshotStorage, loadFullState } from './snapshot-storage';
 
 /**
  * SnapshotManager orchestrates snapshot operations for a world.
@@ -135,6 +135,32 @@ export class SnapshotManager {
    * @returns The restored world state, or null if snapshot not found
    */
   restoreSnapshot(snapshotId: string): WorldSlice | null {
-    throw new Error('Not implemented');
+    // Load full state from storage
+    const worldState = loadFullState(this.worldId, snapshotId);
+
+    // Return null if not found
+    if (!worldState) {
+      return null;
+    }
+
+    // Validate structure - check for required WorldSlice fields
+    if (!this.isValidWorldSlice(worldState)) {
+      return null;
+    }
+
+    return worldState;
+  }
+
+  /**
+   * Validates that an object has the required WorldSlice fields
+   */
+  private isValidWorldSlice(obj: any): obj is WorldSlice {
+    return (
+      obj !== null &&
+      typeof obj === 'object' &&
+      'tick' in obj &&
+      'agents' in obj &&
+      'config' in obj
+    );
   }
 }
