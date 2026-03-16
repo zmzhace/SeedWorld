@@ -1,6 +1,6 @@
 import type { WorldSlice } from '../domain/world';
 import type { SnapshotMetadata, SnapshotTrigger, WorldSnapshot } from '../domain/snapshot';
-import { saveMetadata, saveFullState } from './snapshot-storage';
+import { saveMetadata, saveFullState, loadMetadata } from './snapshot-storage';
 
 /**
  * SnapshotManager orchestrates snapshot operations for a world.
@@ -99,7 +99,10 @@ export class SnapshotManager {
    * @returns Array of snapshot metadata, sorted by timestamp (newest first)
    */
   listSnapshots(): SnapshotMetadata[] {
-    throw new Error('Not implemented');
+    const metadata = loadMetadata(this.worldId);
+    // Sort by timestamp descending (newest first)
+    // ISO format strings sort correctly lexicographically
+    return metadata.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }
 
   /**

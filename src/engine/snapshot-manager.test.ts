@@ -194,4 +194,66 @@ describe('SnapshotManager', () => {
       expect(metadata.label).toBeUndefined();
     });
   });
+
+  describe('listSnapshots', () => {
+    it('should return empty array when no snapshots exist', () => {
+      vi.mocked(global.localStorage.getItem).mockReturnValue(null);
+
+      const snapshots = manager.listSnapshots();
+
+      expect(snapshots).toEqual([]);
+    });
+
+    it('should return sorted snapshots (newest first)', () => {
+      const mockMetadata = [
+        {
+          id: 'snap-1',
+          worldId,
+          tick: 10,
+          timestamp: '2026-03-16T10:00:00Z',
+          trigger: 'manual' as SnapshotTrigger,
+          description: 'First snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 1, narrativeCount: 0, eventSummary: '' },
+          isManual: true,
+        },
+        {
+          id: 'snap-2',
+          worldId,
+          tick: 20,
+          timestamp: '2026-03-16T12:00:00Z',
+          trigger: 'agent_death' as SnapshotTrigger,
+          description: 'Second snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 0, narrativeCount: 0, eventSummary: '' },
+          isManual: false,
+        },
+        {
+          id: 'snap-3',
+          worldId,
+          tick: 15,
+          timestamp: '2026-03-16T11:00:00Z',
+          trigger: 'manual' as SnapshotTrigger,
+          description: 'Third snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 1, narrativeCount: 0, eventSummary: '' },
+          isManual: true,
+        },
+      ];
+
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(mockMetadata));
+
+      const snapshots = manager.listSnapshots();
+
+      expect(snapshots).toHaveLength(3);
+      expect(snapshots[0].id).toBe('snap-2'); // Newest (12:00)
+      expect(snapshots[1].id).toBe('snap-3'); // Middle (11:00)
+      expect(snapshots[2].id).toBe('snap-1'); // Oldest (10:00)
+    });
+
+    it('should handle malformed storage data gracefully', () => {
+      vi.mocked(global.localStorage.getItem).mockReturnValue('invalid json');
+
+      const snapshots = manager.listSnapshots();
+
+      expect(snapshots).toEqual([]);
+    });
+  });
 });
