@@ -1,8 +1,15 @@
 import type { PersonalAgentState, WorldSlice } from '../domain/world'
-import type { ConversationTrigger, ConversationTriggerType } from '../domain/conversation'
+import type {
+  ConversationTrigger,
+  ConversationTriggerType,
+  ConversationScene,
+  ConversationRound,
+  ConversationResult,
+} from '../domain/conversation'
 import { DramaticTensionSystem } from './dramatic-tension-system'
 import { MemePropagationSystem } from './meme-propagation-system'
 import { ReputationSystem } from './reputation-system'
+import { generateConversationTurn } from '../server/llm/agent-decision-llm'
 
 type PressureSignal = { type: ConversationTriggerType; score: number; description: string }
 
@@ -165,4 +172,101 @@ export function selectConversationPairs(
     }
   }
   return selected
+}
+
+const MAX_ROUNDS = 6
+const LEAVE_ACTIONS = ['leave', 'withdraw', 'walk_away', 'depart']
+
+export async function runConversationScene(
+  agents: PersonalAgentState[],
+  trigger: ConversationTrigger,
+  location: string,
+  world: WorldSlice,
+): Promise<ConversationResult> {
+  const scene: ConversationScene = {
+    id: `conv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    location,
+    participants: agents.map(a => a.genetics.seed),
+    trigger,
+    rounds: [],
+    status: 'active',
+  }
+
+  const accumulated_feedback: ConversationResult['accumulated_feedback'] = []
+  const order = Math.random() < 0.5 ? [0, 1] : [1, 0]
+  let pendingFinalTurn = false
+
+  for (let roundNum = 0; roundNum < MAX_ROUNDS; roundNum++) {
+    for (const idx of order) {
+      const agent = agents[idx]
+      const result = await generateConversationTurn(
+        agent, world, scene.rounds,
+        { type: trigger.type, description: trigger.description },
+      )
+
+      if (!result) {
+        scene.status = 'concluded'
+        return makeConcludedResult(scene, accumulated_feedback)
+      }
+
+      const round: ConversationRound = {
+        speaker: agent.genetics.seed,
+        dialogue: result.dialogue ?? '',
+        inner_monologue: result.inner_monologue ?? '',
+        action: {
+          type: result.action?.type ?? 'speak',
+          target: result.action?.target,
+          intensity: result.action?.intensity ?? 0.5,
+        },
+        system_feedback: result.system_feedback,
+        continue_conversation: result.continue_conversation ?? true,
+      }
+
+      scene.rounds.push(round)
+
+      if (result.system_feedback) {
+        accumulated_feedback.push({
+          agentId: agent.genetics.seed,
+          feedback: result.system_feedback,
+        })
+      }
+
+      if (LEAVE_ACTIONS.includes(round.action.type.toLowerCase())) {
+        scene.status = 'concluded'
+        return makeConcludedResult(scene, accumulated_feedback)
+      }
+
+      if (!round.continue_conversation) {
+        if (pendingFinalTurn) {
+          scene.status = 'concluded'
+          return makeConcludedResult(scene, accumulated_feedback)
+        }
+        pendingFinalTurn = true
+      }
+    }
+
+    if (pendingFinalTurn) {
+      scene.status = 'concluded'
+      return makeConcludedResult(scene, accumulated_feedback)
+    }
+  }
+
+  scene.status = 'concluded'
+  return makeConcludedResult(scene, accumulated_feedback)
+}
+
+function makeConcludedResult(
+  scene: ConversationScene,
+  accumulated_feedback: ConversationResult['accumulated_feedback'],
+): ConversationResult {
+  const speakers = [...new Set(scene.rounds.map(r => r.speaker))]
+  const tone = scene.trigger.type === 'tension' ? 'tensely'
+    : scene.trigger.type === 'relationship' ? 'intensely'
+    : 'earnestly'
+
+  const bystander_summary = scene.rounds.length > 0
+    ? `${speakers.join(' and ')} spoke ${tone} about ${scene.trigger.description.toLowerCase()}`
+    : `${speakers.join(' and ')} had a brief encounter`
+
+  return { scene, bystander_summary, accumulated_feedback }
 }
