@@ -351,7 +351,13 @@ export default function WorldDetailPage() {
           {/* Chat column */}
           <div className="lg:col-span-5">
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <ChatShell world={world} onWorldUpdate={setWorld} />
+              <ChatShell
+                world={world}
+                onWorldUpdate={(updatedWorld) => {
+                  setWorld(updatedWorld)
+                  localStorage.setItem(`world_${worldId}`, JSON.stringify(updatedWorld))
+                }}
+              />
             </div>
           </div>
 
