@@ -46,4 +46,152 @@ describe('SnapshotManager', () => {
     expect(manager.restoreSnapshot).toBeDefined();
     expect(typeof manager.restoreSnapshot).toBe('function');
   });
+
+  describe('createSnapshot', () => {
+    let mockWorld: WorldSlice;
+
+    beforeEach(() => {
+      mockWorld = {
+        world_id: worldId,
+        tick: 42,
+        time: '2026-03-16T10:00:00Z',
+        config: { language: 'en' },
+        environment: { description: 'Test world' },
+        social_context: {
+          macro_events: [],
+          narratives: [],
+          pressures: [],
+          institutions: [],
+          ambient_noise: [],
+        },
+        agents: {
+          director: { kind: 'world', id: 'director-1' },
+          creator: { kind: 'persona', id: 'creator-1' },
+          personal: {
+            kind: 'personal',
+            genetics: { seed: 'seed-1' },
+            identity: { name: 'Player' },
+            memory_short: [],
+            memory_long: [],
+            vitals: { energy: 1, stress: 0, sleep_debt: 0, focus: 1, aging_index: 0 },
+            emotion: { label: 'neutral', intensity: 0.5 },
+            persona: { openness: 0.5, stability: 0.5, attachment: 0.5, agency: 0.5, empathy: 0.5 },
+            goals: [],
+            relations: {},
+            action_history: [],
+            life_status: 'alive',
+          },
+          social: { kind: 'social', id: 'social-1' },
+          npcs: [
+            {
+              kind: 'personal',
+              genetics: { seed: 'seed-2' },
+              identity: { name: 'NPC1' },
+              memory_short: [],
+              memory_long: [],
+              vitals: { energy: 1, stress: 0, sleep_debt: 0, focus: 1, aging_index: 0 },
+              emotion: { label: 'happy', intensity: 0.7 },
+              persona: { openness: 0.6, stability: 0.6, attachment: 0.6, agency: 0.6, empathy: 0.6 },
+              goals: [],
+              relations: {},
+              action_history: [],
+              life_status: 'alive',
+            },
+            {
+              kind: 'personal',
+              genetics: { seed: 'seed-3' },
+              identity: { name: 'NPC2' },
+              memory_short: [],
+              memory_long: [],
+              vitals: { energy: 0, stress: 1, sleep_debt: 1, focus: 0, aging_index: 1 },
+              emotion: { label: 'sad', intensity: 0.9 },
+              persona: { openness: 0.4, stability: 0.4, attachment: 0.4, agency: 0.4, empathy: 0.4 },
+              goals: [],
+              relations: {},
+              action_history: [],
+              life_status: 'dead',
+              death_tick: 40,
+              cause_of_death: 'Test death',
+            },
+          ],
+        },
+        narratives: { patterns: [], counter: 0 },
+        events: [],
+        relations: {},
+        active_hooks: [],
+        systems: {},
+      } as WorldSlice;
+
+      // Reset localStorage mock
+      vi.mocked(global.localStorage.getItem).mockReturnValue(null);
+      vi.mocked(global.localStorage.setItem).mockClear();
+    });
+
+    it('should create snapshot with generated ID and metadata', () => {
+      const metadata = manager.createSnapshot(mockWorld, 'manual', 'Test snapshot');
+
+      expect(metadata.id).toBeDefined();
+      expect(metadata.worldId).toBe(worldId);
+      expect(metadata.tick).toBe(42);
+      expect(metadata.timestamp).toBeDefined();
+      expect(metadata.trigger).toBe('manual');
+      expect(metadata.label).toBe('Test snapshot');
+      expect(metadata.isManual).toBe(true);
+    });
+
+    it('should generate description based on trigger type', () => {
+      const triggers: Array<{ trigger: SnapshotTrigger; expectedDesc: string }> = [
+        { trigger: 'manual', expectedDesc: 'Manual snapshot' },
+        { trigger: 'agent_death', expectedDesc: 'Agent death detected' },
+        { trigger: 'agent_birth', expectedDesc: 'Agent birth detected' },
+        { trigger: 'tension_climax', expectedDesc: 'Dramatic tension climax' },
+        { trigger: 'narrative_turn', expectedDesc: 'Narrative turning point' },
+        { trigger: 'relationship', expectedDesc: 'Significant relationship change' },
+        { trigger: 'resource', expectedDesc: 'Resource event detected' },
+        { trigger: 'world_event', expectedDesc: 'World event occurred' },
+      ];
+
+      triggers.forEach(({ trigger, expectedDesc }) => {
+        const metadata = manager.createSnapshot(mockWorld, trigger);
+        expect(metadata.description).toBe(expectedDesc);
+      });
+    });
+
+    it('should extract thumbnail data from world', () => {
+      const metadata = manager.createSnapshot(mockWorld, 'manual');
+
+      expect(metadata.thumbnail.agentCount).toBe(2); // 2 NPCs
+      expect(metadata.thumbnail.aliveAgentCount).toBe(1); // 1 alive
+      expect(metadata.thumbnail.narrativeCount).toBe(0);
+      expect(metadata.thumbnail.eventSummary).toBeDefined();
+    });
+
+    it('should save metadata to storage', () => {
+      manager.createSnapshot(mockWorld, 'manual');
+
+      expect(global.localStorage.setItem).toHaveBeenCalledWith(
+        `world_${worldId}_snapshots_meta`,
+        expect.any(String)
+      );
+    });
+
+    it('should save full state to storage', () => {
+      const metadata = manager.createSnapshot(mockWorld, 'manual');
+
+      expect(global.localStorage.setItem).toHaveBeenCalledWith(
+        `world_${worldId}_snapshot_${metadata.id}`,
+        expect.any(String)
+      );
+    });
+
+    it('should mark non-manual snapshots as not manual', () => {
+      const metadata = manager.createSnapshot(mockWorld, 'agent_death');
+      expect(metadata.isManual).toBe(false);
+    });
+
+    it('should work without optional label', () => {
+      const metadata = manager.createSnapshot(mockWorld, 'agent_death');
+      expect(metadata.label).toBeUndefined();
+    });
+  });
 });
