@@ -4,7 +4,7 @@ import type { WorldSlice } from '../domain/world';
  * Trigger detection result
  */
 export interface TriggerResult {
-  trigger: 'agent_death' | 'agent_birth' | 'tension_climax' | null;
+  trigger: 'agent_death' | 'agent_birth' | 'tension_climax' | 'narrative_turn' | null;
   description?: string;
 }
 
@@ -51,6 +51,28 @@ export function detectTensionClimax(
     return {
       trigger: 'tension_climax',
       description: 'Dramatic tension peaked',
+    };
+  }
+
+  return {
+    trigger: null,
+  };
+}
+
+/**
+ * Detects narrative turning point when new narrative patterns appear
+ */
+export function detectNarrativeTurn(
+  prevWorld: WorldSlice,
+  currentWorld: WorldSlice
+): TriggerResult {
+  const prevCount = prevWorld.narratives.patterns.length;
+  const currentCount = currentWorld.narratives.patterns.length;
+
+  if (currentCount > prevCount) {
+    return {
+      trigger: 'narrative_turn',
+      description: 'Narrative turning point detected',
     };
   }
 
