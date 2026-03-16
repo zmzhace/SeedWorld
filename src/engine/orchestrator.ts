@@ -27,6 +27,14 @@ import { SocialRoleSystem } from './social-role-system'
 import { MemePropagationSystem } from './meme-propagation-system'
 import { HierarchicalMemorySystem } from './hierarchical-memory-system'
 import { AttentionMechanism } from './attention-mechanism'
+import { SnapshotManager } from './snapshot-manager'
+import {
+  detectAgentDeathOrBirth,
+  detectTensionClimax,
+  detectNarrativeTurn,
+  detectRelationshipChange,
+  detectResourceEvent,
+} from './snapshot-triggers'
 
 type OrchestratorOptions = {
   search?: () => Promise<SearchSignal[]>
@@ -1055,6 +1063,41 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
       ...next,
       tick_summary: tickBehaviors.join('\n'),
     }
+  }
+
+  // ===== Snapshot system — detect triggers and create snapshots =====
+  const snapshotManager = new SnapshotManager(world.world_id)
+
+  // Detect all triggers
+  const triggerResults = [
+    detectAgentDeathOrBirth(world, next),
+    detectTensionClimax(world, next),
+    detectNarrativeTurn(world, next),
+    detectRelationshipChange(world, next),
+    detectResourceEvent(world, next),
+  ]
+
+  // Find first trigger that fired
+  const firedTrigger = triggerResults.find(t => t.trigger !== null)
+
+  // Create snapshot if any trigger fired
+  if (firedTrigger && firedTrigger.trigger) {
+    await snapshotManager.createSnapshot(next, firedTrigger.trigger)
+    console.log(`[Snapshot] Created snapshot for trigger: ${firedTrigger.trigger}`)
+  }
+
+  // Cleanup old auto-snapshots (keep only 10 most recent)
+  const allSnapshots = await snapshotManager.listSnapshots()
+  const autoSnapshots = allSnapshots
+    .filter(s => !s.isManual)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+  if (autoSnapshots.length > 10) {
+    const snapshotsToDelete = autoSnapshots.slice(10)
+    for (const snapshot of snapshotsToDelete) {
+      await snapshotManager.deleteSnapshot(snapshot.id)
+    }
+    console.log(`[Snapshot] Cleaned up ${snapshotsToDelete.length} old auto-snapshots`)
   }
 
   await bus.emit('after_tick', { world: next })
