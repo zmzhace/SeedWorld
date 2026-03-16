@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import WorldDetailPage from './page';
 import { SnapshotManager } from '@/engine/snapshot-manager';
 import { createInitialWorldSlice } from '@/domain/world';
+import { toast } from 'sonner';
 
 // Mock dependencies
 vi.mock('next/navigation', () => ({
@@ -28,6 +29,15 @@ vi.mock('@/engine/orchestrator', () => ({
 }));
 
 vi.mock('@/engine/snapshot-manager');
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+  Toaster: () => null,
+}));
 
 vi.mock('@/components/snapshot-timeline-panel', () => ({
   SnapshotTimelinePanel: ({ worldId, onRestore }: any) => (
@@ -226,5 +236,85 @@ describe('WorldDetailPage - Snapshot Integration', () => {
     });
 
     mockAlert.mockRestore();
+  });
+
+  it('should show toast notification when manual snapshot is created', async () => {
+    const mockCreateSnapshot = vi.fn().mockReturnValue({
+      id: 'new-snapshot-id',
+      worldId: 'test-world-id',
+      tick: 5,
+      timestamp: new Date().toISOString(),
+      trigger: 'manual',
+      description: 'Manual snapshot',
+      isManual: true,
+      thumbnail: {
+        agentCount: 0,
+        aliveAgentCount: 0,
+        narrativeCount: 0,
+        eventSummary: 'No recent events',
+      },
+    });
+
+    vi.mocked(SnapshotManager).mockImplementation(() => ({
+      createSnapshot: mockCreateSnapshot,
+      listSnapshots: vi.fn(() => []),
+      deleteSnapshot: vi.fn(),
+      restoreSnapshot: vi.fn(),
+    }) as any);
+
+    const mockPrompt = vi.spyOn(window, 'prompt').mockReturnValue('Test snapshot');
+
+    render(<WorldDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-snapshot-button')).toBeInTheDocument();
+    });
+
+    const snapshotButton = screen.getByTestId('manual-snapshot-button');
+    fireEvent.click(snapshotButton);
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot created'),
+        expect.objectContaining({
+          description: expect.stringContaining('Test snapshot'),
+        })
+      );
+    });
+
+    mockPrompt.mockRestore();
+  });
+
+  it('should show toast notification when snapshot is restored', async () => {
+    const restoredWorld = createInitialWorldSlice();
+    restoredWorld.world_id = 'test-world-id';
+    restoredWorld.tick = 3;
+
+    const mockRestoreSnapshot = vi.fn().mockReturnValue(restoredWorld);
+
+    vi.mocked(SnapshotManager).mockImplementation(() => ({
+      createSnapshot: vi.fn(),
+      listSnapshots: vi.fn(() => []),
+      deleteSnapshot: vi.fn(),
+      restoreSnapshot: mockRestoreSnapshot,
+    }) as any);
+
+    render(<WorldDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('snapshot-timeline-panel')).toBeInTheDocument();
+    });
+
+    const restoreButton = screen.getByText('Restore Test Snapshot');
+    fireEvent.click(restoreButton);
+
+    await waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot restored'),
+        expect.objectContaining({
+          description: expect.stringContaining('tick 3'),
+        })
+      );
+    });
   });
 });

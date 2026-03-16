@@ -17,6 +17,7 @@ import { createInitialWorldSlice } from '@/domain/world'
 import { getWorld } from '@/store/worlds'
 import { runWorldTick } from '@/engine/orchestrator'
 import { SnapshotManager } from '@/engine/snapshot-manager'
+import { toast, Toaster } from 'sonner'
 import {
   ArrowLeft,
   Play,
@@ -127,11 +128,30 @@ export default function WorldDetailPage() {
 
       localStorage.setItem(`world_${worldId}`, JSON.stringify(nextWorld))
 
+      // Create auto-snapshot after tick
+      try {
+        snapshotManager.createSnapshot(nextWorld, 'auto')
+        toast.success('Tick advanced', {
+          description: `Auto-snapshot created at tick ${nextWorld.tick}`,
+          duration: 3000,
+        })
+      } catch (error) {
+        console.error('Failed to create auto-snapshot:', error)
+        // Don't block the tick if snapshot fails
+        toast.success('Tick advanced', {
+          description: `World advanced to tick ${nextWorld.tick}`,
+          duration: 3000,
+        })
+      }
+
       setWorld(nextWorld)
       console.log('Time advanced to tick', nextWorld.tick)
     } catch (error) {
       console.error('Failed to advance time:', error)
-      alert('Failed to advance time: ' + (error as Error).message)
+      toast.error('Failed to advance time', {
+        description: (error as Error).message,
+        duration: 5000,
+      })
       setAutoAdvancing(false)
     } finally {
       setAdvancing(false)
@@ -176,9 +196,18 @@ export default function WorldDetailPage() {
     try {
       snapshotManager.createSnapshot(world, 'manual', label || undefined)
       console.log('Manual snapshot created')
+      toast.success('Snapshot created', {
+        description: label
+          ? `"${label}" at tick ${world.tick}`
+          : `Manual snapshot at tick ${world.tick}`,
+        duration: 4000,
+      })
     } catch (error) {
       console.error('Failed to create snapshot:', error)
-      alert('Failed to create snapshot: ' + (error as Error).message)
+      toast.error('Failed to create snapshot', {
+        description: (error as Error).message,
+        duration: 5000,
+      })
     }
   }
 
@@ -186,7 +215,10 @@ export default function WorldDetailPage() {
     try {
       const restoredWorld = snapshotManager.restoreSnapshot(snapshotId)
       if (!restoredWorld) {
-        alert('Failed to restore snapshot')
+        toast.error('Failed to restore snapshot', {
+          description: 'Snapshot not found or corrupted',
+          duration: 5000,
+        })
         return
       }
 
@@ -197,9 +229,16 @@ export default function WorldDetailPage() {
       localStorage.setItem(`world_${worldId}`, JSON.stringify(restoredWorld))
 
       console.log('Snapshot restored to tick', restoredWorld.tick)
+      toast.info('Snapshot restored', {
+        description: `World restored to tick ${restoredWorld.tick}`,
+        duration: 4000,
+      })
     } catch (error) {
       console.error('Failed to restore snapshot:', error)
-      alert('Failed to restore snapshot: ' + (error as Error).message)
+      toast.error('Failed to restore snapshot', {
+        description: (error as Error).message,
+        duration: 5000,
+      })
     }
   }
 
@@ -235,7 +274,9 @@ export default function WorldDetailPage() {
   // --- Main render ---
 
   return (
-    <main className="min-h-screen bg-[#FAFAFA] text-slate-800">
+    <>
+      <Toaster position="top-right" richColors closeButton />
+      <main className="min-h-screen bg-[#FAFAFA] text-slate-800">
       {/* ===== Header / Top Bar ===== */}
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur-xl shadow-sm">
         <div className="mx-auto max-w-7xl px-6 py-3">
@@ -466,5 +507,6 @@ export default function WorldDetailPage() {
         </div>
       </div>
     </main>
+    </>
   )
 }
