@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computePairPressure } from './conversation-scene'
+import { computePairPressure, selectConversationPairs } from './conversation-scene'
 import type { PersonalAgentState, WorldSlice } from '../domain/world'
 import { createPersonalAgent } from '../domain/agents'
 
@@ -50,5 +50,38 @@ describe('computePairPressure', () => {
     const result = computePairPressure(a, b, world)
     expect(result.pressure_score).toBeGreaterThan(0)
     expect(['relationship', 'narrative']).toContain(result.type)
+  })
+})
+
+describe('selectConversationPairs', () => {
+  const THRESHOLD = 0.4
+
+  it('returns no pairs when agents are unrelated', () => {
+    const agents = [makeAgent('a'), makeAgent('b'), makeAgent('c')]
+    const pairs = selectConversationPairs(agents, {} as WorldSlice, THRESHOLD)
+    expect(pairs).toHaveLength(0)
+  })
+
+  it('returns pairs above threshold', () => {
+    const agents = [
+      makeAgent('a', { relations: { b: -0.9 } }),
+      makeAgent('b', { relations: { a: -0.8 } }),
+      makeAgent('c'),
+    ]
+    const pairs = selectConversationPairs(agents, {} as WorldSlice, THRESHOLD)
+    expect(pairs.length).toBeGreaterThanOrEqual(1)
+    expect(pairs[0].participants).toEqual(expect.arrayContaining(['a', 'b']))
+  })
+
+  it('does not let an agent appear in multiple pairs', () => {
+    const agents = [
+      makeAgent('a', { relations: { b: -0.9, c: -0.85 } }),
+      makeAgent('b', { relations: { a: -0.8 } }),
+      makeAgent('c', { relations: { a: -0.7 } }),
+    ]
+    const pairs = selectConversationPairs(agents, {} as WorldSlice, THRESHOLD)
+    const allParticipants = pairs.flatMap(p => p.participants)
+    const unique = new Set(allParticipants)
+    expect(unique.size).toBe(allParticipants.length)
   })
 })

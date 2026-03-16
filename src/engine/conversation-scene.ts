@@ -127,3 +127,42 @@ export function computePairPressure(
   const best = signals[0]
   return { type: best.type, pressure_score: best.score, description: best.description }
 }
+
+export type ConversationPair = {
+  participants: [string, string]
+  agents: [PersonalAgentState, PersonalAgentState]
+  trigger: ConversationTrigger
+}
+
+export function selectConversationPairs(
+  agents: PersonalAgentState[],
+  world: WorldSlice,
+  threshold: number,
+): ConversationPair[] {
+  const candidates: ConversationPair[] = []
+  for (let i = 0; i < agents.length; i++) {
+    for (let j = i + 1; j < agents.length; j++) {
+      const trigger = computePairPressure(agents[i], agents[j], world)
+      if (trigger.pressure_score >= threshold) {
+        candidates.push({
+          participants: [agents[i].genetics.seed, agents[j].genetics.seed],
+          agents: [agents[i], agents[j]],
+          trigger,
+        })
+      }
+    }
+  }
+  candidates.sort((a, b) => b.trigger.pressure_score - a.trigger.pressure_score)
+
+  const claimed = new Set<string>()
+  const selected: ConversationPair[] = []
+  for (const pair of candidates) {
+    const [seedA, seedB] = pair.participants
+    if (!claimed.has(seedA) && !claimed.has(seedB)) {
+      selected.push(pair)
+      claimed.add(seedA)
+      claimed.add(seedB)
+    }
+  }
+  return selected
+}
