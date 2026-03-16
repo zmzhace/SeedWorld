@@ -4,7 +4,7 @@ import type { WorldSlice } from '../domain/world';
  * Trigger detection result
  */
 export interface TriggerResult {
-  trigger: 'agent_death' | 'agent_birth' | 'tension_climax' | 'narrative_turn' | null;
+  trigger: 'agent_death' | 'agent_birth' | 'tension_climax' | 'narrative_turn' | 'relationship' | null;
   description?: string;
 }
 
@@ -74,6 +74,56 @@ export function detectNarrativeTurn(
       trigger: 'narrative_turn',
       description: 'Narrative turning point detected',
     };
+  }
+
+  return {
+    trigger: null,
+  };
+}
+
+/**
+ * Detects significant relationship changes by comparing reputation scores
+ * Triggers when any reputation dimension changes by more than 0.3
+ */
+export function detectRelationshipChange(
+  prevWorld: WorldSlice,
+  currentWorld: WorldSlice
+): TriggerResult {
+  const prevReputations = prevWorld.systems.reputation?.reputations || {};
+  const currentReputations = currentWorld.systems.reputation?.reputations || {};
+
+  // Check all agents that exist in both worlds
+  for (const agentId of Object.keys(prevReputations)) {
+    const prevRep = prevReputations[agentId];
+    const currentRep = currentReputations[agentId];
+
+    // Skip if agent doesn't exist in current world
+    if (!currentRep) continue;
+
+    // Check all reputation dimensions
+    const dimensions: Array<keyof typeof prevRep> = [
+      'trustworthiness',
+      'competence',
+      'benevolence',
+      'status',
+      'influence',
+    ];
+
+    for (const dimension of dimensions) {
+      const prevValue = prevRep[dimension];
+      const currentValue = currentRep[dimension];
+
+      if (typeof prevValue === 'number' && typeof currentValue === 'number') {
+        const delta = Math.abs(currentValue - prevValue);
+
+        if (delta > 0.3) {
+          return {
+            trigger: 'relationship',
+            description: 'Significant relationship change',
+          };
+        }
+      }
+    }
   }
 
   return {

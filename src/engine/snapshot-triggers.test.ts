@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { detectAgentDeathOrBirth, detectTensionClimax, detectNarrativeTurn } from './snapshot-triggers';
+import { detectAgentDeathOrBirth, detectTensionClimax, detectNarrativeTurn, detectRelationshipChange } from './snapshot-triggers';
 import type { WorldSlice } from '../domain/world';
+import type { Reputation } from './reputation-system';
 
 describe('snapshot-triggers', () => {
   describe('detectAgentDeathOrBirth', () => {
@@ -267,6 +268,163 @@ describe('snapshot-triggers', () => {
 
       expect(result.trigger).toBeNull();
       expect(result.description).toBeUndefined();
+    });
+  });
+
+  describe('detectRelationshipChange', () => {
+    const createMockWorldWithReputation = (reputations: Record<string, Reputation>): WorldSlice => ({
+      id: 'test-world',
+      name: 'Test World',
+      config: {
+        language: 'en',
+        llmProvider: 'openai',
+        llmModel: 'gpt-4',
+        tickInterval: 60000,
+        maxAgents: 10,
+        autoSaveInterval: 300000,
+      },
+      environment: {
+        description: 'Test environment',
+        time: { tick: 0, hour: 12, dayOfYear: 1, season: 'spring' },
+        locations: [],
+        resources: [],
+      },
+      agents: {
+        npcs: [],
+      },
+      systems: {
+        reputation: { reputations, socialNetwork: {} },
+        dramaticTension: { patterns: [], globalTension: 0 },
+        resourceCompetition: { claims: [], conflicts: [] },
+        memePropagation: { memes: [] },
+        knowledgeGraph: { nodes: [], edges: [] },
+        socialRole: { roles: [] },
+        attentionMechanism: { focusQueue: [] },
+        cognitiveBias: { biasRecords: [] },
+        circadianRhythm: { agentRhythms: [] },
+        conversationSystem: { activeConversations: [] },
+      },
+      narrative: {
+        events: [],
+        arcs: [],
+      },
+      metadata: {
+        createdAt: Date.now(),
+        lastModified: Date.now(),
+        version: '1.0.0',
+      },
+    });
+
+    const createReputation = (agentId: string, trustworthiness: number): Reputation => ({
+      agent_id: agentId,
+      trustworthiness,
+      competence: 0.5,
+      benevolence: 0.5,
+      status: 0.5,
+      influence: 0.5,
+      history: [],
+      last_updated: 0,
+      decay_rate: 0.01,
+    });
+
+    it('detects relationship change when trustworthiness delta > 0.3', () => {
+      const prevWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.3),
+      });
+      const currentWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.7),
+      });
+
+      const result = detectRelationshipChange(prevWorld, currentWorld);
+
+      expect(result.trigger).toBe('relationship');
+      expect(result.description).toBe('Significant relationship change');
+    });
+
+    it('detects relationship change when competence delta > 0.3', () => {
+      const prevWorld = createMockWorldWithReputation({
+        'agent-1': {
+          agent_id: 'agent-1',
+          trustworthiness: 0.5,
+          competence: 0.2,
+          benevolence: 0.5,
+          status: 0.5,
+          influence: 0.5,
+          history: [],
+          last_updated: 0,
+          decay_rate: 0.01,
+        },
+      });
+      const currentWorld = createMockWorldWithReputation({
+        'agent-1': {
+          agent_id: 'agent-1',
+          trustworthiness: 0.5,
+          competence: 0.6,
+          benevolence: 0.5,
+          status: 0.5,
+          influence: 0.5,
+          history: [],
+          last_updated: 0,
+          decay_rate: 0.01,
+        },
+      });
+
+      const result = detectRelationshipChange(prevWorld, currentWorld);
+
+      expect(result.trigger).toBe('relationship');
+      expect(result.description).toBe('Significant relationship change');
+    });
+
+    it('returns null when delta <= 0.3', () => {
+      const prevWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.5),
+      });
+      const currentWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.7),
+      });
+
+      const result = detectRelationshipChange(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('returns null when no reputation data', () => {
+      const prevWorld = createMockWorldWithReputation({});
+      const currentWorld = createMockWorldWithReputation({});
+
+      const result = detectRelationshipChange(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('handles missing agents gracefully', () => {
+      const prevWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.5),
+      });
+      const currentWorld = createMockWorldWithReputation({
+        'agent-2': createReputation('agent-2', 0.5),
+      });
+
+      const result = detectRelationshipChange(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('detects negative reputation change', () => {
+      const prevWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.8),
+      });
+      const currentWorld = createMockWorldWithReputation({
+        'agent-1': createReputation('agent-1', 0.4),
+      });
+
+      const result = detectRelationshipChange(prevWorld, currentWorld);
+
+      expect(result.trigger).toBe('relationship');
+      expect(result.description).toBe('Significant relationship change');
     });
   });
 });
