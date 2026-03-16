@@ -1,6 +1,6 @@
 import type { WorldSlice } from '../domain/world';
 import type { SnapshotMetadata, SnapshotTrigger, WorldSnapshot } from '../domain/snapshot';
-import { saveMetadata, saveFullState, loadMetadata } from './snapshot-storage';
+import { saveMetadata, saveFullState, loadMetadata, deleteSnapshot as deleteSnapshotStorage } from './snapshot-storage';
 
 /**
  * SnapshotManager orchestrates snapshot operations for a world.
@@ -108,9 +108,25 @@ export class SnapshotManager {
   /**
    * Deletes a snapshot.
    * @param snapshotId - ID of the snapshot to delete
+   * @throws Error if snapshot is manual or not found
    */
   deleteSnapshot(snapshotId: string): void {
-    throw new Error('Not implemented');
+    // Load metadata to find the snapshot
+    const metadata = loadMetadata(this.worldId);
+    const snapshot = metadata.find((m) => m.id === snapshotId);
+
+    // Check if snapshot exists
+    if (!snapshot) {
+      throw new Error('Snapshot not found');
+    }
+
+    // Check if snapshot is manual
+    if (snapshot.isManual) {
+      throw new Error('Cannot delete manual snapshots');
+    }
+
+    // Delete from storage
+    deleteSnapshotStorage(this.worldId, snapshotId);
   }
 
   /**

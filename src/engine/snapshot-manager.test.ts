@@ -256,4 +256,92 @@ describe('SnapshotManager', () => {
       expect(snapshots).toEqual([]);
     });
   });
+
+  describe('deleteSnapshot', () => {
+    it('should throw error when trying to delete manual snapshot', () => {
+      const mockMetadata = [
+        {
+          id: 'snap-manual',
+          worldId,
+          tick: 10,
+          timestamp: '2026-03-16T10:00:00Z',
+          trigger: 'manual' as SnapshotTrigger,
+          description: 'Manual snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 1, narrativeCount: 0, eventSummary: '' },
+          isManual: true,
+        },
+      ];
+
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(mockMetadata));
+
+      expect(() => {
+        manager.deleteSnapshot('snap-manual');
+      }).toThrow('Cannot delete manual snapshots');
+    });
+
+    it('should delete auto snapshot successfully', () => {
+      const mockMetadata = [
+        {
+          id: 'snap-auto',
+          worldId,
+          tick: 20,
+          timestamp: '2026-03-16T12:00:00Z',
+          trigger: 'agent_death' as SnapshotTrigger,
+          description: 'Auto snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 0, narrativeCount: 0, eventSummary: '' },
+          isManual: false,
+        },
+        {
+          id: 'snap-other',
+          worldId,
+          tick: 15,
+          timestamp: '2026-03-16T11:00:00Z',
+          trigger: 'tension_climax' as SnapshotTrigger,
+          description: 'Other snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 1, narrativeCount: 0, eventSummary: '' },
+          isManual: false,
+        },
+      ];
+
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(mockMetadata));
+
+      manager.deleteSnapshot('snap-auto');
+
+      // Verify setItem was called to update metadata (removing the deleted snapshot)
+      expect(global.localStorage.setItem).toHaveBeenCalledWith(
+        `world_${worldId}_snapshots_meta`,
+        expect.stringContaining('snap-other')
+      );
+      expect(global.localStorage.setItem).toHaveBeenCalledWith(
+        `world_${worldId}_snapshots_meta`,
+        expect.not.stringContaining('snap-auto')
+      );
+
+      // Verify removeItem was called to delete full state
+      expect(global.localStorage.removeItem).toHaveBeenCalledWith(
+        `world_${worldId}_snapshot_snap-auto`
+      );
+    });
+
+    it('should throw error when snapshot ID does not exist', () => {
+      const mockMetadata = [
+        {
+          id: 'snap-exists',
+          worldId,
+          tick: 10,
+          timestamp: '2026-03-16T10:00:00Z',
+          trigger: 'agent_death' as SnapshotTrigger,
+          description: 'Existing snapshot',
+          thumbnail: { agentCount: 1, aliveAgentCount: 1, narrativeCount: 0, eventSummary: '' },
+          isManual: false,
+        },
+      ];
+
+      vi.mocked(global.localStorage.getItem).mockReturnValue(JSON.stringify(mockMetadata));
+
+      expect(() => {
+        manager.deleteSnapshot('snap-nonexistent');
+      }).toThrow('Snapshot not found');
+    });
+  });
 });
