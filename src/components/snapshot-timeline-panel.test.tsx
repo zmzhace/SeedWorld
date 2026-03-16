@@ -187,5 +187,196 @@ describe('SnapshotTimelinePanel', () => {
 
     expect(mockDeleteSnapshot).toHaveBeenCalledWith('snap-auto');
   });
+
+  it('shows preview button for each snapshot', async () => {
+    const mockSnapshots: SnapshotMetadata[] = [
+      {
+        id: 'snap-1',
+        worldId: 'test-world',
+        tick: 10,
+        timestamp: '2026-03-16T10:00:00.000Z',
+        trigger: 'manual',
+        description: 'Manual snapshot',
+        thumbnail: {
+          agentCount: 5,
+          aliveAgentCount: 4,
+          narrativeCount: 2,
+          eventSummary: 'tick',
+        },
+        isManual: true,
+      },
+    ];
+
+    const { SnapshotManager } = await import('@/engine/snapshot-manager');
+    const mockListSnapshots = vi.fn(() => mockSnapshots);
+    (SnapshotManager as any).mockImplementation(() => ({
+      listSnapshots: mockListSnapshots,
+      deleteSnapshot: vi.fn(),
+    }));
+
+    render(<SnapshotTimelinePanel worldId="test-world" />);
+
+    const previewButton = screen.getByRole('button', { name: /preview/i });
+    expect(previewButton).toBeInTheDocument();
+  });
+
+  it('shows preview UI when preview button is clicked', async () => {
+    const mockSnapshots: SnapshotMetadata[] = [
+      {
+        id: 'snap-1',
+        worldId: 'test-world',
+        tick: 10,
+        timestamp: '2026-03-16T10:00:00.000Z',
+        trigger: 'manual',
+        description: 'Manual snapshot',
+        thumbnail: {
+          agentCount: 5,
+          aliveAgentCount: 4,
+          narrativeCount: 2,
+          eventSummary: 'tick',
+        },
+        isManual: true,
+      },
+    ];
+
+    const { SnapshotManager } = await import('@/engine/snapshot-manager');
+    const mockListSnapshots = vi.fn(() => mockSnapshots);
+    (SnapshotManager as any).mockImplementation(() => ({
+      listSnapshots: mockListSnapshots,
+      deleteSnapshot: vi.fn(),
+    }));
+
+    render(<SnapshotTimelinePanel worldId="test-world" />);
+
+    const previewButton = screen.getByRole('button', { name: /preview/i });
+    fireEvent.click(previewButton);
+
+    expect(screen.getByText(/preview snapshot/i)).toBeInTheDocument();
+  });
+
+  it('shows diff information in preview UI', async () => {
+    const mockSnapshots: SnapshotMetadata[] = [
+      {
+        id: 'snap-1',
+        worldId: 'test-world',
+        tick: 10,
+        timestamp: '2026-03-16T10:00:00.000Z',
+        trigger: 'manual',
+        description: 'Manual snapshot',
+        thumbnail: {
+          agentCount: 5,
+          aliveAgentCount: 4,
+          narrativeCount: 2,
+          eventSummary: 'tick',
+        },
+        isManual: true,
+      },
+    ];
+
+    const { SnapshotManager } = await import('@/engine/snapshot-manager');
+    const mockListSnapshots = vi.fn(() => mockSnapshots);
+    (SnapshotManager as any).mockImplementation(() => ({
+      listSnapshots: mockListSnapshots,
+      deleteSnapshot: vi.fn(),
+    }));
+
+    render(
+      <SnapshotTimelinePanel
+        worldId="test-world"
+        currentTick={15}
+        currentAgentCount={6}
+      />
+    );
+
+    const previewButton = screen.getByRole('button', { name: /preview/i });
+    fireEvent.click(previewButton);
+
+    // Should show tick difference
+    expect(screen.getByText(/tick.*10/i)).toBeInTheDocument();
+    // Should show agent count
+    expect(screen.getByText(/5.*agents/i)).toBeInTheDocument();
+  });
+
+  it('calls onRestore when restore is clicked in preview', async () => {
+    const mockSnapshots: SnapshotMetadata[] = [
+      {
+        id: 'snap-1',
+        worldId: 'test-world',
+        tick: 10,
+        timestamp: '2026-03-16T10:00:00.000Z',
+        trigger: 'manual',
+        description: 'Manual snapshot',
+        thumbnail: {
+          agentCount: 5,
+          aliveAgentCount: 4,
+          narrativeCount: 2,
+          eventSummary: 'tick',
+        },
+        isManual: true,
+      },
+    ];
+
+    const { SnapshotManager } = await import('@/engine/snapshot-manager');
+    const mockListSnapshots = vi.fn(() => mockSnapshots);
+    (SnapshotManager as any).mockImplementation(() => ({
+      listSnapshots: mockListSnapshots,
+      deleteSnapshot: vi.fn(),
+    }));
+
+    const onRestore = vi.fn();
+    render(<SnapshotTimelinePanel worldId="test-world" onRestore={onRestore} />);
+
+    // Open preview
+    const previewButton = screen.getByRole('button', { name: /preview/i });
+    fireEvent.click(previewButton);
+
+    // Click restore in preview
+    const restoreButtons = screen.getAllByRole('button', { name: /restore/i });
+    const previewRestoreButton = restoreButtons[restoreButtons.length - 1]; // Last one should be in preview
+    fireEvent.click(previewRestoreButton);
+
+    expect(onRestore).toHaveBeenCalledWith('snap-1');
+  });
+
+  it('closes preview when cancel is clicked', async () => {
+    const mockSnapshots: SnapshotMetadata[] = [
+      {
+        id: 'snap-1',
+        worldId: 'test-world',
+        tick: 10,
+        timestamp: '2026-03-16T10:00:00.000Z',
+        trigger: 'manual',
+        description: 'Manual snapshot',
+        thumbnail: {
+          agentCount: 5,
+          aliveAgentCount: 4,
+          narrativeCount: 2,
+          eventSummary: 'tick',
+        },
+        isManual: true,
+      },
+    ];
+
+    const { SnapshotManager } = await import('@/engine/snapshot-manager');
+    const mockListSnapshots = vi.fn(() => mockSnapshots);
+    (SnapshotManager as any).mockImplementation(() => ({
+      listSnapshots: mockListSnapshots,
+      deleteSnapshot: vi.fn(),
+    }));
+
+    render(<SnapshotTimelinePanel worldId="test-world" />);
+
+    // Open preview
+    const previewButton = screen.getByRole('button', { name: /preview/i });
+    fireEvent.click(previewButton);
+
+    expect(screen.getByText(/preview snapshot/i)).toBeInTheDocument();
+
+    // Click cancel
+    const cancelButton = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(cancelButton);
+
+    expect(screen.queryByText(/preview snapshot/i)).not.toBeInTheDocument();
+  });
 });
 
