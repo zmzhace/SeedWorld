@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectAgentDeathOrBirth } from './snapshot-triggers';
+import { detectAgentDeathOrBirth, detectTensionClimax } from './snapshot-triggers';
 import type { WorldSlice } from '../domain/world';
 
 describe('snapshot-triggers', () => {
@@ -88,6 +88,81 @@ describe('snapshot-triggers', () => {
       const currentWorld = createMockWorld(5);
 
       const result = detectAgentDeathOrBirth(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+  });
+
+  describe('detectTensionClimax', () => {
+    const createMockWorldWithTension = (tension: number): WorldSlice => ({
+      id: 'test-world',
+      name: 'Test World',
+      config: {
+        language: 'en',
+        llmProvider: 'openai',
+        llmModel: 'gpt-4',
+        tickInterval: 60000,
+        maxAgents: 10,
+        autoSaveInterval: 300000,
+      },
+      environment: {
+        description: 'Test environment',
+        time: { tick: 0, hour: 12, dayOfYear: 1, season: 'spring' },
+        locations: [],
+        resources: [],
+      },
+      agents: {
+        npcs: [],
+      },
+      systems: {
+        reputation: { profiles: [] },
+        dramaticTension: { patterns: [], globalTension: tension },
+        resourceCompetition: { claims: [], conflicts: [] },
+        memePropagation: { memes: [] },
+        knowledgeGraph: { nodes: [], edges: [] },
+        socialRole: { roles: [] },
+        attentionMechanism: { focusQueue: [] },
+        cognitiveBias: { biasRecords: [] },
+        circadianRhythm: { agentRhythms: [] },
+        conversationSystem: { activeConversations: [] },
+      },
+      narrative: {
+        events: [],
+        arcs: [],
+      },
+      metadata: {
+        createdAt: Date.now(),
+        lastModified: Date.now(),
+        version: '1.0.0',
+      },
+    });
+
+    it('detects climax when crossing 0.8 threshold from below', () => {
+      const prevWorld = createMockWorldWithTension(0.75);
+      const currentWorld = createMockWorldWithTension(0.85);
+
+      const result = detectTensionClimax(prevWorld, currentWorld);
+
+      expect(result.trigger).toBe('tension_climax');
+      expect(result.description).toBe('Dramatic tension peaked');
+    });
+
+    it('returns null when already above 0.8', () => {
+      const prevWorld = createMockWorldWithTension(0.85);
+      const currentWorld = createMockWorldWithTension(0.9);
+
+      const result = detectTensionClimax(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('returns null when below 0.8', () => {
+      const prevWorld = createMockWorldWithTension(0.5);
+      const currentWorld = createMockWorldWithTension(0.6);
+
+      const result = detectTensionClimax(prevWorld, currentWorld);
 
       expect(result.trigger).toBeNull();
       expect(result.description).toBeUndefined();
