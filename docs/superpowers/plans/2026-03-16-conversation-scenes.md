@@ -1091,9 +1091,9 @@ for (const npcResult of npcResults) {
   for (const { agentId, feedback } of npcResult.conversationFeedback) {
     // Find witnesses (colocated agents)
     const agent = updatedNpcsMap.get(agentId)
-    const location = agent?.location ?? agent?.identity?.location
+    const location = agent?.location
     const witnesses = next.agents.npcs
-      .filter(n => n.genetics.seed !== agentId && (n.location ?? n.identity?.location) === location)
+      .filter(n => n.genetics.seed !== agentId && n.location === location)
       .map(n => n.genetics.seed)
 
     // Route through same 6 systems as single-shot feedback
