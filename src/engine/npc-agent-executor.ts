@@ -327,7 +327,7 @@ export async function executeNpcAgents(
 
     // 第二波：能看到第一波的行动
     if (wave2.length > 0) {
-      const fullContext = [bystanderContext, priorContext, ...wave1Context].filter(Boolean).join('\n')
+      const fullContext = [priorContext, ...wave1Context].filter(Boolean).join('\n')
       const contextForWave2 = fullContext
         ? `[What just happened around you]\n${fullContext}`
         : undefined

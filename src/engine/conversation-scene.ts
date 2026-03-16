@@ -195,10 +195,17 @@ export async function runConversationScene(
   const accumulated_feedback: ConversationResult['accumulated_feedback'] = []
   const order = Math.random() < 0.5 ? [0, 1] : [1, 0]
   let pendingFinalTurn = false
+  let finalTurnForAgent: number | null = null // which agent index gets the final turn
 
   for (let roundNum = 0; roundNum < MAX_ROUNDS; roundNum++) {
     for (const idx of order) {
       const agent = agents[idx]
+
+      // If we're in final-turn mode but this isn't the agent who gets the final turn, skip
+      if (pendingFinalTurn && idx !== finalTurnForAgent) {
+        continue
+      }
+
       const result = await generateConversationTurn(
         agent, world, scene.rounds,
         { type: trigger.type, description: trigger.description },
@@ -236,18 +243,17 @@ export async function runConversationScene(
         return makeConcludedResult(scene, accumulated_feedback)
       }
 
-      if (!round.continue_conversation) {
-        if (pendingFinalTurn) {
-          scene.status = 'concluded'
-          return makeConcludedResult(scene, accumulated_feedback)
-        }
-        pendingFinalTurn = true
+      // If this was the final turn, we're done
+      if (pendingFinalTurn && idx === finalTurnForAgent) {
+        scene.status = 'concluded'
+        return makeConcludedResult(scene, accumulated_feedback)
       }
-    }
 
-    if (pendingFinalTurn) {
-      scene.status = 'concluded'
-      return makeConcludedResult(scene, accumulated_feedback)
+      // Agent signals they want to stop — give the OTHER agent one final turn
+      if (!round.continue_conversation) {
+        pendingFinalTurn = true
+        finalTurnForAgent = order.find(i => i !== idx)!
+      }
     }
   }
 
