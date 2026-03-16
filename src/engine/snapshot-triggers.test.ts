@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { detectAgentDeathOrBirth, detectTensionClimax, detectNarrativeTurn, detectRelationshipChange } from './snapshot-triggers';
+import { detectAgentDeathOrBirth, detectTensionClimax, detectNarrativeTurn, detectRelationshipChange, detectResourceEvent } from './snapshot-triggers';
 import type { WorldSlice } from '../domain/world';
 import type { Reputation } from './reputation-system';
+import type { Resource } from './resource-competition-system';
 
 describe('snapshot-triggers', () => {
   describe('detectAgentDeathOrBirth', () => {
@@ -425,6 +426,159 @@ describe('snapshot-triggers', () => {
 
       expect(result.trigger).toBe('relationship');
       expect(result.description).toBe('Significant relationship change');
+    });
+  });
+
+  describe('detectResourceEvent', () => {
+    const createMockWorldWithResources = (resources: Record<string, Resource>): WorldSlice => ({
+      id: 'test-world',
+      name: 'Test World',
+      config: {
+        language: 'en',
+        llmProvider: 'openai',
+        llmModel: 'gpt-4',
+        tickInterval: 60000,
+        maxAgents: 10,
+        autoSaveInterval: 300000,
+      },
+      environment: {
+        description: 'Test environment',
+        time: { tick: 0, hour: 12, dayOfYear: 1, season: 'spring' },
+        locations: [],
+        resources: [],
+      },
+      agents: {
+        npcs: [],
+      },
+      systems: {
+        reputation: { profiles: [] },
+        dramaticTension: { patterns: [], globalTension: 0 },
+        resourceCompetition: { claims: [], conflicts: [] },
+        memePropagation: { memes: [] },
+        knowledgeGraph: { nodes: [], edges: [] },
+        socialRole: { roles: [] },
+        attentionMechanism: { focusQueue: [] },
+        cognitiveBias: { biasRecords: [] },
+        circadianRhythm: { agentRhythms: [] },
+        conversationSystem: { activeConversations: [] },
+        resources: { resources },
+      },
+      narrative: {
+        events: [],
+        arcs: [],
+      },
+      metadata: {
+        createdAt: Date.now(),
+        lastModified: Date.now(),
+        version: '1.0.0',
+      },
+    });
+
+    const createResource = (id: string, amount: number): Resource => ({
+      id,
+      type: 'material',
+      name: id,
+      amount,
+      max_amount: 100,
+      regeneration_rate: 5,
+      scarcity: 0.5,
+      value: 0.7,
+    });
+
+    it('detects resource depletion when amount goes to 0', () => {
+      const prevWorld = createMockWorldWithResources({
+        'food': createResource('food', 50),
+      });
+      const currentWorld = createMockWorldWithResources({
+        'food': createResource('food', 0),
+      });
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBe('resource');
+      expect(result.description).toBe('Resource event detected');
+    });
+
+    it('detects resource discovery when amount goes from 0', () => {
+      const prevWorld = createMockWorldWithResources({
+        'gold': createResource('gold', 0),
+      });
+      const currentWorld = createMockWorldWithResources({
+        'gold': createResource('gold', 30),
+      });
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBe('resource');
+      expect(result.description).toBe('Resource event detected');
+    });
+
+    it('returns null when amount changes but not to/from 0', () => {
+      const prevWorld = createMockWorldWithResources({
+        'water': createResource('water', 50),
+      });
+      const currentWorld = createMockWorldWithResources({
+        'water': createResource('water', 30),
+      });
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('returns null when no resources exist', () => {
+      const prevWorld = createMockWorldWithResources({});
+      const currentWorld = createMockWorldWithResources({});
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('returns null when resources are undefined', () => {
+      const prevWorld = createMockWorldWithResources({});
+      const currentWorld = createMockWorldWithResources({});
+
+      // Remove resources field to test undefined case
+      delete prevWorld.systems.resources;
+      delete currentWorld.systems.resources;
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('handles new resources appearing gracefully', () => {
+      const prevWorld = createMockWorldWithResources({
+        'food': createResource('food', 50),
+      });
+      const currentWorld = createMockWorldWithResources({
+        'food': createResource('food', 50),
+        'wood': createResource('wood', 20),
+      });
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
+    });
+
+    it('handles resources disappearing gracefully', () => {
+      const prevWorld = createMockWorldWithResources({
+        'food': createResource('food', 50),
+        'wood': createResource('wood', 20),
+      });
+      const currentWorld = createMockWorldWithResources({
+        'food': createResource('food', 50),
+      });
+
+      const result = detectResourceEvent(prevWorld, currentWorld);
+
+      expect(result.trigger).toBeNull();
+      expect(result.description).toBeUndefined();
     });
   });
 });

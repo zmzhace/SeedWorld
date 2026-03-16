@@ -4,7 +4,7 @@ import type { WorldSlice } from '../domain/world';
  * Trigger detection result
  */
 export interface TriggerResult {
-  trigger: 'agent_death' | 'agent_birth' | 'tension_climax' | 'narrative_turn' | 'relationship' | null;
+  trigger: 'agent_death' | 'agent_birth' | 'tension_climax' | 'narrative_turn' | 'relationship' | 'resource' | null;
   description?: string;
 }
 
@@ -123,6 +123,55 @@ export function detectRelationshipChange(
           };
         }
       }
+    }
+  }
+
+  return {
+    trigger: null,
+  };
+}
+
+/**
+ * Detects resource depletion or discovery by comparing resource amounts
+ * Triggers when a resource amount goes to 0 (depletion) or from 0 (discovery)
+ */
+export function detectResourceEvent(
+  prevWorld: WorldSlice,
+  currentWorld: WorldSlice
+): TriggerResult {
+  const prevResources = prevWorld.systems.resources?.resources || {};
+  const currentResources = currentWorld.systems.resources?.resources || {};
+
+  // Check all resources that exist in both worlds
+  const allResourceIds = new Set([
+    ...Object.keys(prevResources),
+    ...Object.keys(currentResources),
+  ]);
+
+  for (const resourceId of allResourceIds) {
+    const prevResource = prevResources[resourceId];
+    const currentResource = currentResources[resourceId];
+
+    // Skip if resource doesn't exist in both worlds
+    if (!prevResource || !currentResource) continue;
+
+    const prevAmount = prevResource.amount;
+    const currentAmount = currentResource.amount;
+
+    // Check for depletion: amount goes to 0
+    if (prevAmount > 0 && currentAmount === 0) {
+      return {
+        trigger: 'resource',
+        description: 'Resource event detected',
+      };
+    }
+
+    // Check for discovery: amount goes from 0
+    if (prevAmount === 0 && currentAmount > 0) {
+      return {
+        trigger: 'resource',
+        description: 'Resource event detected',
+      };
     }
   }
 
