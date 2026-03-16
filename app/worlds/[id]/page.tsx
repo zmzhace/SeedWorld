@@ -12,9 +12,11 @@ import { NarrativeTimelinePanel } from '@/components/panel/narrative-timeline-pa
 import { HoutuPanel } from '@/components/panel/houtu-panel'
 import { AgentObserverPanel } from '@/components/panel/agent-observer-panel'
 import { SystemStatsPanel } from '@/components/panel/system-stats-panel'
+import { SnapshotTimelinePanel } from '@/components/snapshot-timeline-panel'
 import { createInitialWorldSlice } from '@/domain/world'
 import { getWorld } from '@/store/worlds'
 import { runWorldTick } from '@/engine/orchestrator'
+import { SnapshotManager } from '@/engine/snapshot-manager'
 import {
   ArrowLeft,
   Play,
@@ -31,6 +33,7 @@ import {
   Scroll,
   BarChart3,
   Pencil,
+  Camera,
 } from 'lucide-react'
 
 const TABS = [
@@ -43,6 +46,7 @@ const TABS = [
   { key: 'houtu', label: 'Life Cycle', icon: RefreshCw },
   { key: 'events', label: 'Events', icon: Scroll },
   { key: 'stats', label: 'Stats', icon: BarChart3 },
+  { key: 'snapshots', label: 'Snapshots', icon: Camera },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
@@ -58,6 +62,9 @@ export default function WorldDetailPage() {
   const [advancing, setAdvancing] = React.useState(false)
   const [autoAdvancing, setAutoAdvancing] = React.useState(false)
   const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10)
+
+  // Snapshot manager
+  const [snapshotManager] = React.useState(() => new SnapshotManager(worldId))
 
   // Inline editing state for title and summary
   const [editingTitle, setEditingTitle] = React.useState(false)
@@ -158,6 +165,42 @@ export default function WorldDetailPage() {
 
   const toggleAutoAdvance = () => {
     setAutoAdvancing(!autoAdvancing)
+  }
+
+  const handleManualSnapshot = () => {
+    if (!world) return
+
+    const label = window.prompt('Enter a label for this snapshot (optional):', '')
+    if (label === null) return // User cancelled
+
+    try {
+      snapshotManager.createSnapshot(world, 'manual', label || undefined)
+      console.log('Manual snapshot created')
+    } catch (error) {
+      console.error('Failed to create snapshot:', error)
+      alert('Failed to create snapshot: ' + (error as Error).message)
+    }
+  }
+
+  const handleRestoreSnapshot = (snapshotId: string) => {
+    try {
+      const restoredWorld = snapshotManager.restoreSnapshot(snapshotId)
+      if (!restoredWorld) {
+        alert('Failed to restore snapshot')
+        return
+      }
+
+      // Update React state
+      setWorld(restoredWorld)
+
+      // Update localStorage
+      localStorage.setItem(`world_${worldId}`, JSON.stringify(restoredWorld))
+
+      console.log('Snapshot restored to tick', restoredWorld.tick)
+    } catch (error) {
+      console.error('Failed to restore snapshot:', error)
+      alert('Failed to restore snapshot: ' + (error as Error).message)
+    }
   }
 
   // --- Loading / Not Found states ---
@@ -273,6 +316,18 @@ export default function WorldDetailPage() {
 
             {/* Right: tick controls */}
             <div className="flex items-center gap-2">
+              {/* Manual Snapshot Button */}
+              <button
+                onClick={handleManualSnapshot}
+                disabled={!world}
+                data-testid="manual-snapshot-button"
+                className="flex items-center gap-1.5 rounded-full bg-purple-50 border border-purple-200 px-3.5 py-1.5 text-sm font-medium text-purple-600 transition-all duration-200 hover:bg-purple-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title="Create manual snapshot"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Snapshot</span>
+              </button>
+
               {/* Tick badge */}
               <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5">
                 <Clock className="h-3.5 w-3.5 text-slate-400" />
@@ -398,6 +453,14 @@ export default function WorldDetailPage() {
               {activeTab === 'houtu' && <HoutuPanel world={world} />}
               {activeTab === 'events' && <EventsPanel world={world} />}
               {activeTab === 'stats' && <SystemStatsPanel world={world} />}
+              {activeTab === 'snapshots' && (
+                <div className="p-6">
+                  <SnapshotTimelinePanel
+                    worldId={worldId}
+                    onRestore={handleRestoreSnapshot}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
