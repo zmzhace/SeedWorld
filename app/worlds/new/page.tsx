@@ -22,6 +22,10 @@ export default function NewWorldPage() {
       console.log('World record created:', worldRecord)
 
       // Call complete initialization: generate world + agents
+      // Note: This can take 3-5 minutes due to LLM generation
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000) // 10 minutes
+
       const response = await fetch('/api/worlds/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -29,7 +33,10 @@ export default function NewWorldPage() {
           worldPrompt: prompt,
           worldId: worldRecord.id
         }),
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         const error = await response.json()
@@ -133,6 +140,7 @@ export default function NewWorldPage() {
                       <p>Creating world state and environment...</p>
                       <p>Generating personalized agents...</p>
                       <p>Preparing emergent narrative system...</p>
+                      <p className="mt-2 text-blue-400">This may take 3-5 minutes. Please wait...</p>
                     </div>
                   </div>
                 </div>
