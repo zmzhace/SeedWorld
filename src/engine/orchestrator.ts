@@ -28,6 +28,15 @@ import { MemePropagationSystem } from './meme-propagation-system'
 import { HierarchicalMemorySystem } from './hierarchical-memory-system'
 import { AttentionMechanism } from './attention-mechanism'
 import { SnapshotManager } from './snapshot-manager'
+import { buildWorldPressureProfile } from './world-pressure-profile'
+import {
+  applySituationConsequences,
+  deriveSituationSnapshot,
+} from './situation-consequences'
+import {
+  detectMaterialSituationChanges,
+  shouldRefreshWorldPressureProfile,
+} from './situation-refresh'
 import {
   detectAgentDeathOrBirth,
   detectTensionClimax,
@@ -130,7 +139,10 @@ function hydrateSystemsFromWorld(world: WorldSlice): void {
 /**
  * Export all system states as SystemsState
  */
-function exportSystemsState(knowledgeGraph: KnowledgeGraph): SystemsState {
+function exportSystemsState(
+  knowledgeGraph: KnowledgeGraph,
+  snapshots: Pick<SystemsState, 'world_pressure_profile' | 'situation_snapshot'> = {},
+): SystemsState {
   return {
     reputation: globalReputationSystem!.toSnapshot(),
     social_roles: globalRoleSystem!.toSnapshot(),
@@ -140,6 +152,8 @@ function exportSystemsState(knowledgeGraph: KnowledgeGraph): SystemsState {
     memes: globalMemeSystem!.toSnapshot(),
     attention: globalAttentionMechanism!.toSnapshot(),
     knowledge_graph: knowledgeGraph.toJSON(),
+    world_pressure_profile: snapshots.world_pressure_profile,
+    situation_snapshot: snapshots.situation_snapshot,
     cognitive_bias: globalBiasSystem!.toSnapshot(),
     collective_memory: globalCollectiveMemory!.toSnapshot(),
     hierarchical_memory: (() => {
@@ -342,16 +356,42 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     },
   }
 
+  const waveOneWorldPressureProfile = buildWorldPressureProfile(baseNext, { wave: 1 })
+  const waveOneSituationSnapshot = deriveSituationSnapshot({
+    tick: baseNext.tick,
+    wave: 1,
+    consequences: [],
+  })
+
   if (!options.directorRegistry) {
-    const earlyNext = { ...baseNext, systems: exportSystemsState(knowledgeGraph) }
+    const earlyNext = {
+      ...baseNext,
+      systems: exportSystemsState(knowledgeGraph, {
+        world_pressure_profile: waveOneWorldPressureProfile,
+        situation_snapshot: waveOneSituationSnapshot,
+      }),
+    }
     await bus.emit('after_tick', { world: earlyNext })
     return earlyNext
   }
 
+  const firstWaveWorld: WorldSlice = {
+    ...baseNext,
+    agents: {
+      ...baseNext.agents,
+      npcs: activeNpcsForDecision,
+    },
+    systems: {
+      ...baseNext.systems,
+      world_pressure_profile: waveOneWorldPressureProfile,
+      situation_snapshot: waveOneSituationSnapshot,
+    },
+  }
+
   // Execute director agents and NPC agents in parallel
   const [directorResults, npcResults] = await Promise.all([
-    options.directorRegistry.runAll(world),
-    executeNpcAgents({ ...world, agents: { ...world.agents, npcs: activeNpcsForDecision } }),
+    options.directorRegistry.runAll(firstWaveWorld),
+    executeNpcAgents(firstWaveWorld),
   ])
 
   // Merge all agent results
@@ -361,6 +401,15 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
   ]
 
   const patch = arbitratePatches(allResults as { agentId: string; patch?: any; error?: string }[])
+
+  const materialChanges = detectMaterialSituationChanges({
+    events: patch.events.map((event) => ({
+      kind: event.kind,
+      summary: event.summary,
+      conflict: event.conflict,
+    })),
+  })
+  const shouldRefreshWaveTwoProfile = shouldRefreshWorldPressureProfile(materialChanges)
 
   // Apply NPC agent state updates
   const updatedNpcsMap = new Map(npcResults.map(r => [r.agentId, r.updatedAgent]))
@@ -385,6 +434,17 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
       })),
     ],
   }
+
+  const finalWorldPressureProfile = shouldRefreshWaveTwoProfile
+    ? buildWorldPressureProfile(next, { wave: 2 })
+    : waveOneWorldPressureProfile
+
+  const structuralConsequences = allResults.flatMap((result) => result.patch?.situation?.consequences ?? [])
+  applySituationConsequences({
+    world: next,
+    consequences: structuralConsequences,
+    knowledgeGraph,
+  })
 
   // Life cycle system - death and reincarnation
   const houtuConfig = createHoutuConfig()
@@ -957,6 +1017,16 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     console.log(`[MemorySystem] WM: ${memStats.working_memory.count}/${memStats.working_memory.capacity}, STM: ${memStats.short_term_memory.count}/${memStats.short_term_memory.capacity}, LTM: ${memStats.long_term_memory.count}`)
   }
   
+  const exportedWaveOneWorldPressureProfile = {
+    ...finalWorldPressureProfile,
+    generated_at_tick: next.tick,
+  }
+  const exportedWaveOneSituationSnapshot = deriveSituationSnapshot({
+    tick: next.tick,
+    wave: finalWorldPressureProfile.wave,
+    consequences: structuralConsequences,
+  })
+
   // Update next's agents + export all system states to next.systems
   next = {
     ...next,
@@ -964,7 +1034,10 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
       ...next.agents,
       npcs: npcsWithAttention
     },
-    systems: exportSystemsState(knowledgeGraph),
+    systems: exportSystemsState(knowledgeGraph, {
+      world_pressure_profile: exportedWaveOneWorldPressureProfile,
+      situation_snapshot: exportedWaveOneSituationSnapshot,
+    }),
   }
 
   // ===== Auto-spawn new agents when population drops =====

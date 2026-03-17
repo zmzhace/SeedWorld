@@ -145,6 +145,31 @@ export type KnowledgeGraphSnapshot = {
   edges: KnowledgeEdge[]
 }
 
+export type PressureAxisSnapshot = {
+  kind: string
+  weight: number
+  summary: string
+  evidence: string[]
+}
+
+export type WorldPressureProfileSnapshot = {
+  generated_at_tick: number
+  wave: number
+  dominantPressures: PressureAxisSnapshot[]
+  powerBasis: PressureAxisSnapshot[]
+  distributionPattern: PressureAxisSnapshot[]
+  legitimacyBasis: PressureAxisSnapshot[]
+  faultLines: PressureAxisSnapshot[]
+  volatileZones: PressureAxisSnapshot[]
+  evidenceTrace: string[]
+}
+
+export type SituationSnapshot = {
+  generated_at_tick: number
+  wave: number
+  summaryByAgent: Record<string, string[]>
+}
+
 export type SystemsState = {
   reputation?: ReputationSnapshot
   social_roles?: SocialRoleSnapshot
@@ -154,6 +179,8 @@ export type SystemsState = {
   memes?: MemeSnapshot
   attention?: AttentionSnapshot
   knowledge_graph?: KnowledgeGraphSnapshot
+  world_pressure_profile?: WorldPressureProfileSnapshot
+  situation_snapshot?: SituationSnapshot
   cognitive_bias?: any
   collective_memory?: any
   hierarchical_memory?: any
