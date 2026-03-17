@@ -40,6 +40,40 @@ export type AgentSituation = {
 
 const MAX_ITEMS = 3
 
+function selectTopSituationItems(situation: AgentSituation): AgentSituationItem[] {
+  return rankItems([
+    ...situation.needsPressure,
+    ...situation.dependencyPressure,
+    ...situation.statusPressure,
+    ...situation.obstruction,
+    ...situation.leverage,
+    ...situation.exposure,
+    ...situation.opportunityWindow,
+    ...situation.inactionCost,
+  ])
+}
+
+function impliesImperative(summary: string): boolean {
+  return /\b(you should|you must|best move|obvious response|need to seize)\b/i.test(summary)
+}
+
+function impliesSinglePath(summary: string): boolean {
+  return /\b(only one real path remains|only path|no alternative|must align|there is only one way)\b/i.test(summary)
+}
+
+function impliesUngroundedCertainty(summary: string): boolean {
+  return /\b(everyone will permanently turn against you|will permanently|inevitably|certainly)\b/i.test(summary)
+}
+
+function assertOpenAffordance(item: AgentSituationItem) {
+  if (item.evidence.length === 0) {
+    throw new Error('Situation pressure requires evidence')
+  }
+  if (impliesImperative(item.summary) || impliesSinglePath(item.summary) || impliesUngroundedCertainty(item.summary)) {
+    throw new Error('Situation pressure must preserve open affordances')
+  }
+}
+
 function rankItems(items: AgentSituationItem[]): AgentSituationItem[] {
   return items
     .sort((a, b) => b.weight - a.weight)
@@ -217,4 +251,13 @@ export function compileAgentSituation(
     inactionCost: collectInactionItems(agent, world, profile),
     evidenceTrace,
   }
+}
+
+export function renderSituationPressure(situation: AgentSituation): string[] {
+  return selectTopSituationItems(situation)
+    .filter((item) => {
+      assertOpenAffordance(item)
+      return true
+    })
+    .map((item) => item.summary)
 }
