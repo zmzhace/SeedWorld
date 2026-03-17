@@ -86,13 +86,40 @@ Requirements:
 
     console.log('WorldGenerator response text:', responseText)
 
-    // Extract JSON from response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('Failed to parse world specification from response: ' + responseText)
+    // Extract JSON from response - try multiple patterns
+    let jsonText = ''
+    const codeBlockMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/)
+    if (codeBlockMatch) {
+      jsonText = codeBlockMatch[1]
+    } else {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('Failed to parse world specification from response: ' + responseText)
+      }
+      jsonText = jsonMatch[0]
     }
 
-    const spec: WorldSpec = JSON.parse(jsonMatch[0])
+    let spec: WorldSpec
+    try {
+      spec = JSON.parse(jsonText)
+    } catch (parseError) {
+      console.error('World JSON parse error:', (parseError as Error).message)
+      console.error('Problematic JSON:', jsonText.substring(0, 1000))
+
+      // Try to fix common JSON issues
+      const fixedJson = jsonText
+        .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
+        .replace(/\n/g, ' ')
+        .replace(/\r/g, '')
+        .replace(/,\s*,/g, ',')
+
+      try {
+        spec = JSON.parse(fixedJson)
+        console.log('Successfully parsed world JSON after cleanup')
+      } catch (secondError) {
+        throw new Error(`Failed to parse world JSON: ${(parseError as Error).message}`)
+      }
+    }
 
     const detectedLanguage = spec.language || 'en'
 
