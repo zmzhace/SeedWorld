@@ -15,7 +15,6 @@ import { SystemStatsPanel } from '@/components/panel/system-stats-panel'
 import { SnapshotTimelinePanel } from '@/components/snapshot-timeline-panel'
 import { createInitialWorldSlice } from '@/domain/world'
 import { getWorld } from '@/store/worlds'
-import { runWorldTick } from '@/engine/orchestrator'
 import { SnapshotManager } from '@/engine/snapshot-manager'
 import { toast, Toaster } from 'sonner'
 import {
@@ -120,11 +119,20 @@ export default function WorldDetailPage() {
     setAdvancing(true)
     try {
       console.log('Advancing time...')
-      const directorRegistry = {
-        runAll: async () => []
+
+      // Call API to run tick on server
+      const response = await fetch(`/api/worlds/${worldId}/tick`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ world }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to advance time')
       }
 
-      const nextWorld = await runWorldTick(world, { directorRegistry })
+      const { world: nextWorld } = await response.json()
 
       localStorage.setItem(`world_${worldId}`, JSON.stringify(nextWorld))
 
