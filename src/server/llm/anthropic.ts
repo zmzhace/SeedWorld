@@ -42,16 +42,13 @@ export async function streamText(
   return textBlock && 'text' in textBlock ? textBlock.text : ''
 }
 
-// 保留原有的 summarizeObservation 功能
-const client = createAnthropicClient()
-
 type ObservationInput = {
   prompt: string
   world: unknown
 }
 
 export async function summarizeObservation(input: ObservationInput): Promise<string> {
-  return streamText(client, {
+  return streamText(createAnthropicClient(), {
     model: getModel(),
     max_tokens: 2048,
     messages: [

@@ -160,14 +160,30 @@ describe('snapshot-triggers', () => {
       expect(result.description).toBeUndefined();
     });
 
-    it('returns null when below 0.8', () => {
-      const prevWorld = createMockWorldWithTension(0.5);
-      const currentWorld = createMockWorldWithTension(0.6);
+    it('reads canonical tension snapshots from systems.tension', () => {
+      const createCanonicalWorldWithTension = (tension: number): WorldSlice => ({
+        ...createMockWorldWithTension(0),
+        systems: {
+          reputation: { profiles: [] },
+          tension: { patterns: [], globalTension: tension },
+          resources: { resources: {} },
+          memes: { memes: {} },
+          knowledge_graph: { nodes: [], edges: [] },
+          social_roles: { roles: [] },
+          attention: { focusQueue: [] },
+          cognitive_bias: { biasRecords: [] },
+          collective_memory: { entries: [] },
+          hierarchical_memory: {},
+        },
+      });
+
+      const prevWorld = createCanonicalWorldWithTension(0.75);
+      const currentWorld = createCanonicalWorldWithTension(0.85);
 
       const result = detectTensionClimax(prevWorld, currentWorld);
 
-      expect(result.trigger).toBeNull();
-      expect(result.description).toBeUndefined();
+      expect(result.trigger).toBe('tension_climax');
+      expect(result.description).toBe('Dramatic tension peaked');
     });
   });
 

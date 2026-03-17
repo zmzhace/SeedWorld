@@ -187,7 +187,12 @@ export async function handleChatTurn(input: ChatTurnInput): Promise<ChatTurnResu
   })
 
   // 4. Generate a narrative response describing what happened
-  const reply = await generateNarrativeReply(interpretation, next)
+  let reply: string
+  try {
+    reply = await generateNarrativeReply(interpretation, next)
+  } catch {
+    reply = `${interpretation.event_description} (tick ${next.tick})`
+  }
 
   return {
     reply,

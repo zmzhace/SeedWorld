@@ -82,7 +82,7 @@ export class DramaticTensionSystem {
     }
 
     // 4. Create suspense (random events)
-    if (Math.random() < 0.1) {
+    if (world.agents.npcs.length > 0 && Math.random() < 0.1) {
       const suspenseTension = this.createSuspenseTension(world)
       newTensions.push(suspenseTension)
     }

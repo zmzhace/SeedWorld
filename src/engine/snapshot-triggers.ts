@@ -44,8 +44,8 @@ export function detectTensionClimax(
   prevWorld: WorldSlice,
   currentWorld: WorldSlice
 ): TriggerResult {
-  const prevTension = prevWorld.systems.dramaticTension.globalTension;
-  const currentTension = currentWorld.systems.dramaticTension.globalTension;
+  const prevTension = readGlobalTension(prevWorld);
+  const currentTension = readGlobalTension(currentWorld);
 
   if (prevTension < 0.8 && currentTension >= 0.8) {
     return {
@@ -57,6 +57,12 @@ export function detectTensionClimax(
   return {
     trigger: null,
   };
+}
+
+function readGlobalTension(world: WorldSlice): number {
+  return world.systems.tension?.globalTension
+    ?? (world.systems as { dramaticTension?: { globalTension?: number } }).dramaticTension?.globalTension
+    ?? 0;
 }
 
 /**
