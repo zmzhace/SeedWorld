@@ -34,8 +34,8 @@ export async function POST(request: Request) {
     console.log('✓ World generated')
     console.log('2. Creating agents...')
 
-    // 2. Create agents via LLM (10 agents in batches of 5)
-    const agentCount = 10
+    // 2. Create agents via LLM (3 agents for Vercel 10s timeout limit)
+    const agentCount = 3
     console.log(`Generating ${agentCount} agents in batches...`)
     const newAgents = await generatePersonalAgents({
       prompt: `${world.environment.description}\n\nSocial context: ${JSON.stringify(world.social_context)}`,
@@ -57,15 +57,9 @@ export async function POST(request: Request) {
       },
     })
 
-    // 3. Generate opening narration (tick 0 prologue)
-    console.log('3. Generating opening narration...')
-    try {
-      const prologue = await generatePrologue(world)
-      world.tick_summary = prologue
-      console.log('✓ Prologue generated')
-    } catch (e) {
-      console.warn('Prologue generation failed, skipping:', (e as Error).message)
-    }
+    // 3. Skip prologue generation to stay within Vercel timeout
+    console.log('3. Skipping prologue generation (Vercel timeout limit)')
+    world.tick_summary = `${world.environment.description}\n\n${newAgents.length} agents have entered this world.`
 
     console.log('=== World initialization complete ===')
 
