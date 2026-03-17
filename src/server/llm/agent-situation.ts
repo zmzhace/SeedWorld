@@ -41,7 +41,7 @@ export type AgentSituation = {
 const MAX_ITEMS = 3
 
 function selectTopSituationItems(situation: AgentSituation): AgentSituationItem[] {
-  return rankItems([
+  const allItems = [
     ...situation.needsPressure,
     ...situation.dependencyPressure,
     ...situation.statusPressure,
@@ -50,7 +50,11 @@ function selectTopSituationItems(situation: AgentSituation): AgentSituationItem[
     ...situation.exposure,
     ...situation.opportunityWindow,
     ...situation.inactionCost,
-  ])
+  ]
+
+  // Prefer items with evidence to ensure open affordance
+  const evidenced = rankItems(allItems.filter((item) => item.evidence.length > 0))
+  return evidenced.length > 0 ? evidenced : rankItems(allItems)
 }
 
 function impliesImperative(summary: string): boolean {
