@@ -47,11 +47,18 @@ async function makeAgentDecision(
       ? ''
       : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000')
 
+    // Add timeout to prevent hanging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 seconds
+
     const res = await fetch(`${baseUrl}/api/agents/decide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agent, world, thisTickContext }),
+      signal: controller.signal,
     })
+
+    clearTimeout(timeoutId)
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }))
