@@ -353,34 +353,51 @@ Return a JSON object:
     throw new Error('No text content in response')
   }
 
-  // Extract JSON from response
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.error('Failed to extract JSON from LLM response:', responseText.substring(0, 500))
-    throw new Error('Failed to parse agent specifications from response')
+  // Extract JSON from response - try multiple patterns
+  let jsonText = ''
+
+  // Try to find JSON between ```json and ``` markers first
+  const codeBlockMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/)
+  if (codeBlockMatch) {
+    jsonText = codeBlockMatch[1]
+  } else {
+    // Fall back to finding any JSON object
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('Failed to extract JSON from LLM response:', responseText.substring(0, 500))
+      throw new Error('Failed to parse agent specifications from response')
+    }
+    jsonText = jsonMatch[0]
   }
 
   let parsed
   try {
     // Try to parse the JSON
-    parsed = JSON.parse(jsonMatch[0])
+    parsed = JSON.parse(jsonText)
   } catch (parseError) {
-    // If parsing fails, try to fix common JSON issues
+    // If parsing fails, save the problematic JSON and try to fix it
     console.error('JSON parse error:', (parseError as Error).message)
-    console.error('Problematic JSON (first 1000 chars):', jsonMatch[0].substring(0, 1000))
+    console.error('Problematic JSON (first 2000 chars):', jsonText.substring(0, 2000))
 
-    // Try to fix trailing commas and other common issues
-    let fixedJson = jsonMatch[0]
+    // Save full JSON to file for debugging
+    const fs = require('fs')
+    const debugPath = '/tmp/agent-json-error.json'
+    fs.writeFileSync(debugPath, jsonText)
+    console.error(`Full problematic JSON saved to: ${debugPath}`)
+
+    // Try to fix common JSON issues
+    let fixedJson = jsonText
       .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
       .replace(/\n/g, ' ')             // Remove newlines
       .replace(/\r/g, '')              // Remove carriage returns
+      .replace(/,\s*,/g, ',')          // Remove double commas
 
     try {
       parsed = JSON.parse(fixedJson)
       console.log('Successfully parsed JSON after cleanup')
     } catch (secondError) {
       console.error('JSON still invalid after cleanup:', (secondError as Error).message)
-      throw new Error(`Failed to parse agent JSON: ${(parseError as Error).message}`)
+      throw new Error(`Failed to parse agent JSON: ${(parseError as Error).message}. Check ${debugPath} for details.`)
     }
   }
 
