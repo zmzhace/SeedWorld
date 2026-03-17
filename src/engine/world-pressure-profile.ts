@@ -3,7 +3,7 @@ import type { WorldPressureProfileSnapshot, WorldSlice } from '@/domain/world'
 type WorldPressureKind = 'resource_scarcity' | 'social_competition' | 'environmental_stress'
 type PowerBasisKind = 'resource_control' | 'social_influence' | 'physical_force'
 type DistributionPatternKind = 'gatekeeping' | 'open_access' | 'informal_exchange'
-type LegitimacyBasisKind = 'tradition' | 'performance' | 'coercion'
+type LegitimacyBasisKind = 'status_authority' | 'performance' | 'coercion'
 type FaultLineKind = 'resource_access' | 'status_hierarchy' | 'territory'
 type VolatileZoneKind = 'resource_site' | 'crowded_hub' | 'frontier'
 
@@ -59,7 +59,7 @@ function rankPressuresFromResources(
   biases: WorldBiases,
   evidenceTrace: string[]
 ): Array<RankedSignal<WorldPressureKind>> {
-  let scarcityWeight = biases.scarcityBias
+  let baseScarcity = biases.scarcityBias
   let socialCompetitionWeight = 0
   let environmentalStressWeight = 0
 
@@ -67,9 +67,8 @@ function rankPressuresFromResources(
     const shortage = clamp01(resource.scarcity)
     const concentration = clamp01(resource.value)
     const depletion = resource.max_amount > 0 ? clamp01(1 - resource.amount / resource.max_amount) : 0
-    const evidence = [`resources:${resource.id}`]
 
-    scarcityWeight += shortage * 0.7 + depletion * 0.2 + concentration * 0.1
+    baseScarcity += shortage * 0.7 + depletion * 0.2 + concentration * 0.1
     socialCompetitionWeight += concentration * 0.2
     environmentalStressWeight += depletion * 0.1
 
@@ -77,6 +76,8 @@ function rankPressuresFromResources(
       `resources:${resource.id}:scarcity=${shortage.toFixed(2)}:value=${concentration.toFixed(2)}:location=${resource.location ?? 'unknown'}`,
     )
   }
+
+  const scarcityWeight = baseScarcity + biases.scarcityBias * 0.2
 
   return sortRankedSignals<WorldPressureKind>([
     {
@@ -179,7 +180,13 @@ function rankLegitimacyBasis(
   biases: WorldBiases,
   evidenceTrace: string[]
 ): Array<RankedSignal<LegitimacyBasisKind>> {
-  const coercionWeight = biases.gatedAccessBias + biases.statusRigidityBias * 0.5
+  const baseLegitimacy = biases.statusRigidityBias
+  const legitimacyWeight = baseLegitimacy + biases.statusRigidityBias * 0.2
+  const coercionWeight = biases.gatedAccessBias + biases.statusRigidityBias * 0.2
+
+  if (legitimacyWeight > 0) {
+    evidenceTrace.push(`legitimacy:status_authority=${legitimacyWeight.toFixed(2)}`)
+  }
 
   if (coercionWeight > 0) {
     evidenceTrace.push(`legitimacy:coercion=${coercionWeight.toFixed(2)}`)
@@ -187,16 +194,16 @@ function rankLegitimacyBasis(
 
   return sortRankedSignals<LegitimacyBasisKind>([
     {
+      kind: 'status_authority',
+      weight: legitimacyWeight,
+      summary: 'Recognized rank and formal standing are helping determine what claims hold.',
+      evidence: evidenceTrace.filter(item => item.startsWith('legitimacy:')),
+    },
+    {
       kind: 'coercion',
       weight: coercionWeight,
       summary: 'Control and exclusion are helping determine what claims hold.',
       evidence: evidenceTrace.filter(item => item.startsWith('legitimacy:')),
-    },
-    {
-      kind: 'tradition',
-      weight: biases.statusRigidityBias * 0.4,
-      summary: 'Hierarchy and inherited order still shape legitimacy.',
-      evidence: [],
     },
     {
       kind: 'performance',
