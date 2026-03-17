@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createInitialWorldSlice } from '@/domain/world'
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class AnthropicMock {
+    messages = {
+      create: async () => ({ content: [{ type: 'text', text: 'summary' }] }),
+    }
+  }
+}))
+
+import { buildAgentPrompt } from './agent-decision-llm'
 import { compileAgentSituation, renderSituationPressure } from './agent-situation'
 
 const baseSituation = {
@@ -38,6 +48,47 @@ describe('compileAgentSituation', () => {
 
     expect(situation.needsPressure.length).toBeGreaterThan(0)
     expect(situation.inactionCost.length).toBeGreaterThan(0)
+  })
+})
+
+describe('buildAgentPrompt', () => {
+  it('keeps prompt order as desire, scene, pressure, identity, people, memory, world', () => {
+    const world = createInitialWorldSlice()
+    const agent = {
+      ...world.agents.personal,
+      location: 'well',
+    }
+    const profile = {
+      generated_at_tick: 1,
+      wave: 1,
+      dominantPressures: [{ kind: 'resource_scarcity', weight: 0.9, summary: 'Water access is narrowing around the well.', evidence: ['resources:water'] }],
+      powerBasis: [{ kind: 'access_control', weight: 0.8, summary: 'Access control shapes who can draw water first.', evidence: ['location:well'] }],
+      distributionPattern: [{ kind: 'gatekeeping', weight: 0.7, summary: 'Access narrows through informal gatekeeping.', evidence: ['environment'] }],
+      legitimacyBasis: [],
+      faultLines: [],
+      volatileZones: [],
+      evidenceTrace: ['resources:water'],
+    }
+
+    const prompt = buildAgentPrompt(agent, {
+      ...world,
+      systems: {
+        ...world.systems,
+        world_pressure_profile: profile,
+        situation_snapshot: {
+          generated_at_tick: 1,
+          wave: 1,
+          summaryByAgent: {
+            [agent.genetics.seed]: ['Water access is narrowing around the well.'],
+          },
+        },
+      },
+    })
+
+    expect(prompt.indexOf('## Desire')).toBeLessThan(prompt.indexOf('## Scene'))
+    expect(prompt.indexOf('## Scene')).toBeLessThan(prompt.indexOf('## Immediate Situation'))
+    expect(prompt.indexOf('## Immediate Situation')).toBeLessThan(prompt.indexOf('## Identity'))
+    expect(prompt.indexOf('## Identity')).toBeLessThan(prompt.indexOf('## People Around You'))
   })
 })
 

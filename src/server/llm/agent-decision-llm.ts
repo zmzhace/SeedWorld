@@ -2,6 +2,7 @@ import type { PersonalAgentState, WorldSlice } from '@/domain/world'
 import { createAnthropicClient, getModel, streamText } from './anthropic'
 import { extractWorldKnowledge } from '@/engine/world-knowledge'
 import type { ConversationRound } from '../../domain/conversation'
+import { compileAgentSituation, renderSituationPressure } from './agent-situation'
 
 /**
  * LLM Agent decision result - fully LLM-driven, no fixed action types
@@ -232,6 +233,16 @@ export function buildAgentPrompt(agent: PersonalAgentState, world: WorldSlice): 
     })
     .join('\n')
 
+  const worldProfile = world.systems?.world_pressure_profile
+  const derivedSituation = worldProfile ? compileAgentSituation(agent, world, worldProfile as any) : null
+  const situationLines = derivedSituation
+    ? renderSituationPressure(derivedSituation)
+    : world.systems?.situation_snapshot?.summaryByAgent?.[agent.genetics.seed] ?? []
+
+  const immediateSituationSection = situationLines.length > 0
+    ? `\n## Immediate Situation\n${situationLines.map(line => `- ${line}`).join('\n')}`
+    : ''
+
   // === System pressure injection — make mechanisms felt ===
   const pressures: string[] = []
 
@@ -342,10 +353,6 @@ export function buildAgentPrompt(agent: PersonalAgentState, world: WorldSlice): 
     pressures.push(`You are highly stressed. The pressure is becoming unbearable.`)
   }
 
-  const pressureSection = pressures.length > 0
-    ? `\n## Pressures bearing down on you\n${pressures.map(p => `- ${p}`).join('\n')}`
-    : ''
-
   // Meme whispers — ideas that have spread to this agent
   let whispersSection = ''
   if (world.systems?.memes) {
@@ -423,15 +430,14 @@ ${colocated.length > 0 ? `You can see and talk to these people right now.` : `No
 
   return `You are "${agent.identity.name}". You are not an AI — you are this person.${langInstruction}
 
-## What you want
+## Desire
 ${agent.goals.length > 0 ? agent.goals.map((g, i) => `${i + 1}. ${g}`).join('\n') : 'You have not decided what to do yet'}
 
-## Where you are right now
+## Scene
 ${myLocation}${colocated.length > 0 ? ` — here with you: ${colocatedNames}` : ' — alone'}
-${sceneSection}
-${pressureSection}
+${sceneSection}${immediateSituationSection}
 
-## Who you are
+## Identity
 ${agent.occupation || 'no occupation'} | ${agent.voice || 'ordinary voice'} | ${agent.approach || 'ordinary approach'}
 Core belief: ${agent.core_belief || 'none'}
 ${agent.expertise?.length ? `Expertise: ${agent.expertise.join(', ')}` : ''}
@@ -439,13 +445,13 @@ Energy: ${(agent.vitals.energy * 100).toFixed(0)}% | Stress: ${(agent.vitals.str
 ${agent.last_action_description ? `Just did: ${agent.last_action_description}` : ''}
 ${agent.last_dialogue ? `Just said: "${agent.last_dialogue}"` : ''}
 
-## People you know
+## People Around You
 ${knownPeople || 'You do not know anyone'}
 ${connectionsSection}
-## What you remember
+## Memory
 ${recentMemories || 'Your mind is blank'}
 
-## The world
+## World
 ${knowledge.environment.description}
 ${knowledge.social.pressures.length > 0 ? `Pressures: ${knowledge.social.pressures.join('; ')}` : ''}
 
