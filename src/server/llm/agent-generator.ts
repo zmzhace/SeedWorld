@@ -356,10 +356,33 @@ Return a JSON object:
   // Extract JSON from response
   const jsonMatch = responseText.match(/\{[\s\S]*\}/)
   if (!jsonMatch) {
+    console.error('Failed to extract JSON from LLM response:', responseText.substring(0, 500))
     throw new Error('Failed to parse agent specifications from response')
   }
 
-  const parsed = JSON.parse(jsonMatch[0])
+  let parsed
+  try {
+    // Try to parse the JSON
+    parsed = JSON.parse(jsonMatch[0])
+  } catch (parseError) {
+    // If parsing fails, try to fix common JSON issues
+    console.error('JSON parse error:', (parseError as Error).message)
+    console.error('Problematic JSON (first 1000 chars):', jsonMatch[0].substring(0, 1000))
+
+    // Try to fix trailing commas and other common issues
+    let fixedJson = jsonMatch[0]
+      .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
+      .replace(/\n/g, ' ')             // Remove newlines
+      .replace(/\r/g, '')              // Remove carriage returns
+
+    try {
+      parsed = JSON.parse(fixedJson)
+      console.log('Successfully parsed JSON after cleanup')
+    } catch (secondError) {
+      console.error('JSON still invalid after cleanup:', (secondError as Error).message)
+      throw new Error(`Failed to parse agent JSON: ${(parseError as Error).message}`)
+    }
+  }
 
   let specs: AgentSpec[]
   let relationSpecs: RelationSpec[] = []
