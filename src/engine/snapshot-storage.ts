@@ -1,6 +1,10 @@
 import type { SnapshotMetadata } from '../domain/snapshot';
 import type { WorldSlice } from '../domain/world';
 
+function getStorage(): Storage | null {
+  return typeof localStorage === 'undefined' ? null : localStorage;
+}
+
 /**
  * Get the localStorage key for snapshot metadata
  */
@@ -19,18 +23,28 @@ function getSnapshotKey(worldId: string, snapshotId: string): string {
  * Save snapshot metadata to localStorage
  */
 export function saveMetadata(worldId: string, metadata: SnapshotMetadata): void {
+  const storage = getStorage();
+  if (!storage) {
+    return;
+  }
+
   const key = getMetadataKey(worldId);
   const existing = loadMetadata(worldId);
   existing.push(metadata);
-  localStorage.setItem(key, JSON.stringify(existing));
+  storage.setItem(key, JSON.stringify(existing));
 }
 
 /**
  * Load all snapshot metadata for a world
  */
 export function loadMetadata(worldId: string): SnapshotMetadata[] {
+  const storage = getStorage();
+  if (!storage) {
+    return [];
+  }
+
   const key = getMetadataKey(worldId);
-  const raw = localStorage.getItem(key);
+  const raw = storage.getItem(key);
   if (!raw) {
     return [];
   }
@@ -45,16 +59,26 @@ export function loadMetadata(worldId: string): SnapshotMetadata[] {
  * Save full world state for a snapshot
  */
 export function saveFullState(worldId: string, snapshotId: string, state: WorldSlice): void {
+  const storage = getStorage();
+  if (!storage) {
+    return;
+  }
+
   const key = getSnapshotKey(worldId, snapshotId);
-  localStorage.setItem(key, JSON.stringify(state));
+  storage.setItem(key, JSON.stringify(state));
 }
 
 /**
  * Load full world state for a snapshot
  */
 export function loadFullState(worldId: string, snapshotId: string): WorldSlice | null {
+  const storage = getStorage();
+  if (!storage) {
+    return null;
+  }
+
   const key = getSnapshotKey(worldId, snapshotId);
-  const raw = localStorage.getItem(key);
+  const raw = storage.getItem(key);
   if (!raw) {
     return null;
   }
@@ -69,14 +93,16 @@ export function loadFullState(worldId: string, snapshotId: string): WorldSlice |
  * Delete a snapshot (both metadata and full state)
  */
 export function deleteSnapshot(worldId: string, snapshotId: string): void {
-  // Remove from metadata array
+  const storage = getStorage();
+  if (!storage) {
+    return;
+  }
+
   const metadata = loadMetadata(worldId);
   const filtered = metadata.filter((m) => m.id !== snapshotId);
   const metaKey = getMetadataKey(worldId);
-  localStorage.setItem(metaKey, JSON.stringify(filtered));
+  storage.setItem(metaKey, JSON.stringify(filtered));
 
-  // Remove full state
   const stateKey = getSnapshotKey(worldId, snapshotId);
-  localStorage.removeItem(stateKey);
+  storage.removeItem(stateKey);
 }
-

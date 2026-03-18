@@ -113,6 +113,26 @@ export default function WorldDetailPage() {
     }
   }, [worldId, worldRecord])
 
+  React.useEffect(() => {
+    if (!world || world.tick !== 0) {
+      return
+    }
+
+    const hasTickZeroSnapshot = snapshotManager
+      .listSnapshots()
+      .some((snapshot) => snapshot.tick === 0)
+
+    if (hasTickZeroSnapshot) {
+      return
+    }
+
+    try {
+      snapshotManager.createSnapshot(world, 'world_event', 'Tick 0')
+    } catch (error) {
+      console.error('Failed to create tick 0 snapshot:', error)
+    }
+  }, [world, snapshotManager])
+
   const handleAdvanceTime = async () => {
     if (!world || advancing) return
 
@@ -138,7 +158,7 @@ export default function WorldDetailPage() {
 
       // Create auto-snapshot after tick
       try {
-        snapshotManager.createSnapshot(nextWorld, 'auto')
+        snapshotManager.createSnapshot(nextWorld, 'world_event')
         toast.success('Tick advanced', {
           description: `Auto-snapshot created at tick ${nextWorld.tick}`,
           duration: 3000,

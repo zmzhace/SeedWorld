@@ -189,9 +189,15 @@ describe('SnapshotManager', () => {
       expect(metadata.isManual).toBe(false);
     });
 
-    it('should work without optional label', () => {
-      const metadata = manager.createSnapshot(mockWorld, 'agent_death');
-      expect(metadata.label).toBeUndefined();
+    it('should skip storage access when localStorage is unavailable', () => {
+      delete (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+
+      const metadata = manager.createSnapshot(mockWorld, 'manual');
+
+      expect(metadata.id).toBeDefined();
+      expect(manager.listSnapshots()).toEqual([]);
+      expect(manager.restoreSnapshot(metadata.id)).toBeNull();
+      expect(() => manager.deleteSnapshot(metadata.id)).toThrow('Snapshot not found');
     });
   });
 
