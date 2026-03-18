@@ -230,6 +230,10 @@ function collectInactionItems(
   return rankItems(items)
 }
 
+function withEvidence(items: AgentSituationItem[]): AgentSituationItem[] {
+  return items.filter((item) => item.evidence.length > 0)
+}
+
 export function compileAgentSituation(
   agent: PersonalAgentState,
   world: WorldSlice,
@@ -245,14 +249,14 @@ export function compileAgentSituation(
   ).slice(0, 12)
 
   return {
-    needsPressure: collectNeedItems(agent, profile),
-    dependencyPressure: collectDependencyItems(agent, world, profile),
-    statusPressure: collectStatusItems(agent, world, profile),
-    obstruction: collectObstructionItems(agent, world, profile),
-    leverage: collectLeverageItems(agent, world, profile),
-    exposure: collectExposureItems(agent, world, profile),
-    opportunityWindow: collectOpportunityItems(agent, world, profile),
-    inactionCost: collectInactionItems(agent, world, profile),
+    needsPressure: withEvidence(collectNeedItems(agent, profile)),
+    dependencyPressure: withEvidence(collectDependencyItems(agent, world, profile)),
+    statusPressure: withEvidence(collectStatusItems(agent, world, profile)),
+    obstruction: withEvidence(collectObstructionItems(agent, world, profile)),
+    leverage: withEvidence(collectLeverageItems(agent, world, profile)),
+    exposure: withEvidence(collectExposureItems(agent, world, profile)),
+    opportunityWindow: withEvidence(collectOpportunityItems(agent, world, profile)),
+    inactionCost: withEvidence(collectInactionItems(agent, world, profile)),
     evidenceTrace,
   }
 }

@@ -90,6 +90,53 @@ describe('buildAgentPrompt', () => {
     expect(prompt.indexOf('## Immediate Situation')).toBeLessThan(prompt.indexOf('## Identity'))
     expect(prompt.indexOf('## Identity')).toBeLessThan(prompt.indexOf('## People Around You'))
   })
+
+  it('does not throw when world pressure only contains unsupported inferred items', () => {
+    const world = createInitialWorldSlice()
+    world.environment.description = 'A rigid court where rank determines what claims are legitimate.'
+    const agent = {
+      ...world.agents.personal,
+      location: 'court',
+    }
+
+    expect(() => buildAgentPrompt(agent, {
+      ...world,
+      systems: {
+        ...world.systems,
+        world_pressure_profile: {
+          generated_at_tick: 1,
+          wave: 1,
+          dominantPressures: [],
+          powerBasis: [{
+            kind: 'social_influence',
+            weight: 0.9,
+            summary: 'Standing and recognition still matter, but less than control of access.',
+            evidence: [],
+          }],
+          distributionPattern: [{
+            kind: 'open_access',
+            weight: 0.7,
+            summary: 'Access remains comparatively open.',
+            evidence: [],
+          }],
+          legitimacyBasis: [{
+            kind: 'status_authority',
+            weight: 1,
+            summary: 'Recognized rank and formal standing are helping determine what claims hold.',
+            evidence: [],
+          }],
+          faultLines: [{
+            kind: 'status_hierarchy',
+            weight: 0.8,
+            summary: 'Hierarchy is creating a parallel social fault line.',
+            evidence: [],
+          }],
+          volatileZones: [],
+          evidenceTrace: [],
+        },
+      },
+    })).not.toThrow()
+  })
 })
 
 describe('renderSituationPressure', () => {
@@ -130,5 +177,25 @@ describe('renderSituationPressure', () => {
         evidence: [],
       }],
     })).toThrow(/evidence/i)
+  })
+
+  it('ignores unsupported pressure items when at least one evidenced item exists', () => {
+    const lines = renderSituationPressure({
+      ...baseSituation,
+      leverage: [{
+        kind: 'social_influence',
+        weight: 0.95,
+        summary: 'Standing and recognition still matter, but less than control of access.',
+        evidence: [],
+      }],
+      inactionCost: [{
+        kind: 'resource_scarcity',
+        weight: 0.8,
+        summary: 'If access keeps narrowing, your share may shrink further.',
+        evidence: ['resources:water'],
+      }],
+    })
+
+    expect(lines).toEqual(['If access keeps narrowing, your share may shrink further.'])
   })
 })
