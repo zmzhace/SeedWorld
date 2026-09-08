@@ -1,540 +1,76 @@
 'use client'
 
 import React from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { ChatShell } from '@/components/chat/chat-shell'
-import { PanelShell } from '@/components/panel/panel-shell'
-import { AgentGeneratorPanel } from '@/components/panel/agent-generator-panel'
-import { EventsPanel } from '@/components/panel/events-panel'
-import { NarrativePanel } from '@/components/panel/narrative-panel'
-import { SocialNetworkPanel } from '@/components/panel/social-network-panel'
-import { NarrativeTimelinePanel } from '@/components/panel/narrative-timeline-panel'
-import { HoutuPanel } from '@/components/panel/houtu-panel'
-import { AgentObserverPanel } from '@/components/panel/agent-observer-panel'
-import { SystemStatsPanel } from '@/components/panel/system-stats-panel'
-import { SnapshotTimelinePanel } from '@/components/snapshot-timeline-panel'
-import { createInitialWorldSlice } from '@/domain/world'
-import { getWorld } from '@/store/worlds'
-import { SnapshotManager } from '@/engine/snapshot-manager'
-import { toast, Toaster } from 'sonner'
-import {
-  ArrowLeft,
-  Play,
-  Pause,
-  SkipForward,
-  Clock,
-  Globe,
-  Users,
-  UserPlus,
-  BookOpen,
-  Share2,
-  Calendar,
-  RefreshCw,
-  Scroll,
-  BarChart3,
-  Pencil,
-  Camera,
-} from 'lucide-react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { ChevronLeft, ChevronRight, CircleDot, GitBranch, Network, PanelLeftClose, PanelLeftOpen, PenTool, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import '@/components/mf/mf-process.css'
+import { GraphView } from '@/components/mf/graph-view'
+import { StepGraphBuild } from '@/components/mf/step-graph-build'
+import { StepEnvSetup } from '@/components/mf/step-env-setup'
+import { StepReport } from '@/components/mf/step-report'
+import { StepInteraction } from '@/components/mf/step-interaction'
+import { NovelStudioPanel } from '@/components/panel/novel-studio-panel'
 
-const TABS = [
-  { key: 'world', label: 'World', icon: Globe },
-  { key: 'observer', label: 'Agents', icon: Users },
-  { key: 'agents', label: 'Create', icon: UserPlus },
-  { key: 'narratives', label: 'Narrative', icon: BookOpen },
-  { key: 'social', label: 'Network', icon: Share2 },
-  { key: 'timeline', label: 'Timeline', icon: Calendar },
-  { key: 'houtu', label: 'Life Cycle', icon: RefreshCw },
-  { key: 'events', label: 'Events', icon: Scroll },
-  { key: 'stats', label: 'Stats', icon: BarChart3 },
-  { key: 'snapshots', label: 'Snapshots', icon: Camera },
-] as const
+const STEPS = [
+  { name:'世界图谱', short:'建图', icon:Network },
+  { name:'知识边界', short:'知识', icon:ShieldCheck },
+  { name:'事件推演', short:'推演', icon:GitBranch },
+  { name:'章节工坊', short:'成章', icon:PenTool },
+  { name:'导演干预', short:'干预', icon:SlidersHorizontal },
+]
 
-type TabKey = (typeof TABS)[number]['key']
+export default function WorldWorkspacePage() {
+  const params=useParams(); const router=useRouter(); const searchParams=useSearchParams(); const worldId=String(params.id||'')
+  const [step,setStep]=React.useState(()=>Math.min(5,Math.max(1,Number(searchParams.get('step')||1))))
+  const [graphOpen,setGraphOpen]=React.useState(true)
+  const [record,setRecord]=React.useState<any>(null); const [ontology,setOntology]=React.useState<any>(null)
+  const [graphStats,setGraphStats]=React.useState({nodes:0,edges:0,types:0}); const [job,setJob]=React.useState<any>(null)
+  const [starting,setStarting]=React.useState(false); const [confirming,setConfirming]=React.useState(false)
+  const [logs,setLogs]=React.useState<Array<{time:string;msg:string}>>([]); const [graphRefreshKey,setGraphRefreshKey]=React.useState(0)
 
-export default function WorldDetailPage() {
-  const params = useParams()
-  const router = useRouter()
-  const worldId = params.id as string
+  const addLog=React.useCallback((msg:string)=>setLogs((lines)=>[...lines.slice(-99),{time:new Date().toLocaleTimeString('zh-CN',{hour12:false}),msg}]),[])
+  const loadRecord=React.useCallback(async()=>{const response=await fetch(`/api/worlds/${worldId}`);if(response.ok){const data=await response.json();setRecord(data);return data}return null},[worldId])
+  const loadOntology=React.useCallback(async()=>{const response=await fetch(`/api/worlds/${worldId}/ontology`);setOntology(response.ok?await response.json():null)},[worldId])
+  const loadGraphStats=React.useCallback(async()=>{try{const response=await fetch(`/api/worlds/${worldId}/graph?limit=200`);const data=await response.json();setGraphStats({nodes:(data.entities||[]).length,edges:(data.facts||[]).length,types:ontology?.entityTypes?.length||0})}catch{}},[worldId,ontology?.entityTypes?.length])
 
-  const [worldRecord, setWorldRecord] = React.useState<ReturnType<typeof getWorld> | undefined>(undefined)
-  const [world, setWorld] = React.useState<ReturnType<typeof createInitialWorldSlice> | null>(null)
-  const [activeTab, setActiveTab] = React.useState<TabKey>('world')
-  const [advancing, setAdvancing] = React.useState(false)
-  const [autoAdvancing, setAutoAdvancing] = React.useState(false)
-  const [autoAdvanceTicks, setAutoAdvanceTicks] = React.useState<number>(10)
+  React.useEffect(()=>{addLog('作品工作台已载入');void loadRecord().then(()=>{void loadOntology();void loadGraphStats()})},[worldId]) // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(()=>{if(window.matchMedia('(max-width: 900px)').matches)setGraphOpen(false)},[])
+  React.useEffect(()=>{const id=searchParams.get('job');if(id)void fetch(`/api/jobs/${id}`).then((r)=>(r.ok?r.json():null)).then((value)=>value&&setJob(value))},[]) // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(()=>{
+    if(!job||['completed','failed','rolled_back'].includes(job.status)){if(job?.status==='completed'){addLog(job.message||'图谱抽取完成');void loadRecord();void loadOntology();void loadGraphStats();setGraphRefreshKey((key)=>key+1)}else if(job?.status==='failed')addLog(`抽取失败：${job.error||job.message}`);return}
+    const timer=window.setInterval(async()=>{const response=await fetch(`/api/jobs/${job.id}`);if(response.ok){const next=await response.json();if(next.message!==job.message)addLog(next.message);setJob(next)}},2500);return()=>window.clearInterval(timer)
+  },[job?.id,job?.status,job?.message]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Snapshot manager
-  const [snapshotManager] = React.useState(() => new SnapshotManager(worldId))
+  async function startExtraction(){setStarting(true);try{addLog('开始生成动态本体');const response=await fetch(`/api/worlds/${worldId}/extractions`,{method:'POST'});const value=await response.json();if(!response.ok)throw new Error(value.error||'启动失败');setJob(value)}catch(cause){addLog(`启动失败：${cause instanceof Error?cause.message:String(cause)}`)}finally{setStarting(false)}}
+  async function confirmVisibility(){setConfirming(true);try{const response=await fetch(`/api/worlds/${worldId}/visibility/confirm`,{method:'POST'});const value=await response.json();if(!response.ok)throw new Error(value.error||'确认失败');setRecord(value);addLog('知识可见性已确认，推演已解锁')}catch(cause){addLog(`确认失败：${cause instanceof Error?cause.message:String(cause)}`)}finally{setConfirming(false)}}
+  const goStep=(next:number)=>{const value=Math.min(5,Math.max(1,next));setStep(value);router.replace(`/worlds/${worldId}?step=${value}`,{scroll:false})}
 
-  // Inline editing state for title and summary
-  const [editingTitle, setEditingTitle] = React.useState(false)
-  const [editingSummary, setEditingSummary] = React.useState(false)
-  const [titleValue, setTitleValue] = React.useState('')
-  const [summaryValue, setSummaryValue] = React.useState('')
+  const status=record?.graphSyncStatus==='failed'?'error':record?.graphSyncStatus==='ready'?'ready':record?.graphSyncStatus==='processing'?'working':'idle'
+  const tick=record?.snapshot?.tick||0; const agents=record?.snapshot?.agents?.npcs||[]
+  const actionable=(ontology?.entityTypes||[]).filter((type:any)=>type.actionable).map((type:any)=>({id:type.name,name:type.displayName||type.name}))
 
-  // Sync editing values when world loads or changes
-  React.useEffect(() => {
-    if (world) {
-      setTitleValue(world.title || '')
-      setSummaryValue(world.summary || '')
-    }
-  }, [world?.title, world?.summary])
+  return <main className="mf-process">
+    <header className="workspace-header">
+      <button className="workspace-brand" onClick={()=>router.push('/')}><span aria-hidden="true"/>SEEDWORLD</button>
+      <div className="workspace-title"><strong>{record?.title||'未命名作品'}</strong><span>{worldId.slice(0,8).toUpperCase()} · TICK {tick}</span></div>
+      <div className="workspace-actions"><button onClick={()=>setGraphOpen((value)=>!value)}>{graphOpen?<PanelLeftClose size={15}/>:<PanelLeftOpen size={15}/>}<span>{graphOpen?'隐藏图谱':'显示图谱'}</span></button><div className={`sync-badge ${status}`}><i/>{status==='ready'?'图谱已同步':status==='working'?'正在抽取':status==='error'?'同步失败':'待建图'}</div></div>
+    </header>
 
-  const saveWorldField = (field: 'title' | 'summary', value: string) => {
-    if (!world) return
-    const updated = { ...world, [field]: value }
-    setWorld(updated)
-    localStorage.setItem(`world_${worldId}`, JSON.stringify(updated))
-  }
+    <nav className="stage-nav" aria-label="作品流程">
+      {STEPS.map(({name,short,icon:Icon},index)=>{const number=index+1;const active=step===number;const done=number<step;return <button key={name} className={`${active?'active ':''}${done?'done':''}`} onClick={()=>goStep(number)}><span className="stage-number">{done?'✓':String(number).padStart(2,'0')}</span><Icon size={15} strokeWidth={1.7}/><span className="stage-name">{name}</span><span className="stage-short">{short}</span></button>})}
+    </nav>
 
-  React.useEffect(() => {
-    setWorldRecord(getWorld(worldId))
-  }, [worldId])
-
-  React.useEffect(() => {
-    if (worldRecord) {
-      const savedWorld = localStorage.getItem(`world_${worldId}`)
-      if (savedWorld) {
-        try {
-          const world = JSON.parse(savedWorld)
-          setWorld(world)
-          console.log('Loaded world from localStorage:', world)
-        } catch (error) {
-          console.error('Failed to parse saved world:', error)
-          const initialWorld = createInitialWorldSlice()
-          initialWorld.world_id = worldId
-          setWorld(initialWorld)
-        }
-      } else {
-        const initialWorld = createInitialWorldSlice()
-        initialWorld.world_id = worldId
-        setWorld(initialWorld)
-      }
-    }
-  }, [worldId, worldRecord])
-
-  React.useEffect(() => {
-    if (!world || world.tick !== 0) {
-      return
-    }
-
-    const hasTickZeroSnapshot = snapshotManager
-      .listSnapshots()
-      .some((snapshot) => snapshot.tick === 0)
-
-    if (hasTickZeroSnapshot) {
-      return
-    }
-
-    try {
-      snapshotManager.createSnapshot(world, 'world_event', 'Tick 0')
-    } catch (error) {
-      console.error('Failed to create tick 0 snapshot:', error)
-    }
-  }, [world, snapshotManager])
-
-  const handleAdvanceTime = async () => {
-    if (!world || advancing) return
-
-    setAdvancing(true)
-    try {
-      console.log('Advancing time...')
-
-      // Call API to run tick on server
-      const response = await fetch(`/api/worlds/${worldId}/tick`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ world }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to advance time')
-      }
-
-      const { world: nextWorld } = await response.json()
-
-      localStorage.setItem(`world_${worldId}`, JSON.stringify(nextWorld))
-
-      // Create auto-snapshot after tick
-      try {
-        snapshotManager.createSnapshot(nextWorld, 'world_event')
-        toast.success('Tick advanced', {
-          description: `Auto-snapshot created at tick ${nextWorld.tick}`,
-          duration: 3000,
-        })
-      } catch (error) {
-        console.error('Failed to create auto-snapshot:', error)
-        // Don't block the tick if snapshot fails
-        toast.success('Tick advanced', {
-          description: `World advanced to tick ${nextWorld.tick}`,
-          duration: 3000,
-        })
-      }
-
-      setWorld(nextWorld)
-      console.log('Time advanced to tick', nextWorld.tick)
-    } catch (error) {
-      console.error('Failed to advance time:', error)
-      toast.error('Failed to advance time', {
-        description: (error as Error).message,
-        duration: 5000,
-      })
-      setAutoAdvancing(false)
-    } finally {
-      setAdvancing(false)
-    }
-  }
-
-  React.useEffect(() => {
-    if (!autoAdvancing || !world || world.agents.npcs.length === 0) return
-
-    let ticksAdvanced = 0
-    const advanceNextTick = async () => {
-      if (ticksAdvanced >= autoAdvanceTicks) {
-        setAutoAdvancing(false)
-        return
-      }
-
-      await handleAdvanceTime()
-      ticksAdvanced++
-
-      if (ticksAdvanced < autoAdvanceTicks && autoAdvancing) {
-        setTimeout(advanceNextTick, 500)
-      }
-    }
-
-    advanceNextTick()
-
-    return () => {
-      ticksAdvanced = autoAdvanceTicks
-    }
-  }, [autoAdvancing])
-
-  const toggleAutoAdvance = () => {
-    setAutoAdvancing(!autoAdvancing)
-  }
-
-  const handleManualSnapshot = () => {
-    if (!world) return
-
-    const label = window.prompt('Enter a label for this snapshot (optional):', '')
-    if (label === null) return // User cancelled
-
-    try {
-      snapshotManager.createSnapshot(world, 'manual', label || undefined)
-      console.log('Manual snapshot created')
-      toast.success('Snapshot created', {
-        description: label
-          ? `"${label}" at tick ${world.tick}`
-          : `Manual snapshot at tick ${world.tick}`,
-        duration: 4000,
-      })
-    } catch (error) {
-      console.error('Failed to create snapshot:', error)
-      toast.error('Failed to create snapshot', {
-        description: (error as Error).message,
-        duration: 5000,
-      })
-    }
-  }
-
-  const handleRestoreSnapshot = (snapshotId: string) => {
-    try {
-      const restoredWorld = snapshotManager.restoreSnapshot(snapshotId)
-      if (!restoredWorld) {
-        toast.error('Failed to restore snapshot', {
-          description: 'Snapshot not found or corrupted',
-          duration: 5000,
-        })
-        return
-      }
-
-      // Update React state
-      setWorld(restoredWorld)
-
-      // Update localStorage
-      localStorage.setItem(`world_${worldId}`, JSON.stringify(restoredWorld))
-
-      console.log('Snapshot restored to tick', restoredWorld.tick)
-      toast.info('Snapshot restored', {
-        description: `World restored to tick ${restoredWorld.tick}`,
-        duration: 4000,
-      })
-    } catch (error) {
-      console.error('Failed to restore snapshot:', error)
-      toast.error('Failed to restore snapshot', {
-        description: (error as Error).message,
-        duration: 5000,
-      })
-    }
-  }
-
-  // --- Loading / Not Found states ---
-
-  if (!worldRecord) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#FAFAFA]">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-slate-800">
-            {worldRecord === undefined ? 'Loading world...' : 'World not found'}
-          </h1>
-          {worldRecord === null && (
-            <p className="mt-2 text-sm text-slate-500">
-              The world you are looking for does not exist.
-            </p>
-          )}
-        </div>
-      </main>
-    )
-  }
-
-  if (!world) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#FAFAFA]">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-slate-800">Loading world...</h1>
-        </div>
-      </main>
-    )
-  }
-
-  // --- Main render ---
-
-  return (
-    <>
-      <Toaster position="top-right" richColors closeButton />
-      <main className="min-h-screen bg-[#FAFAFA] text-slate-800">
-      {/* ===== Header / Top Bar ===== */}
-      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur-xl shadow-sm">
-        <div className="mx-auto max-w-7xl px-6 py-3">
-          <div className="flex items-center justify-between">
-            {/* Left: back + title */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push('/worlds')}
-                className="flex items-center justify-center rounded-xl p-2 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-                aria-label="Back"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-
-              <div className="h-6 w-px bg-slate-200" />
-
-              <div className="min-w-0">
-                {editingTitle ? (
-                  <input
-                    autoFocus
-                    value={titleValue}
-                    onChange={(e) => setTitleValue(e.target.value)}
-                    onBlur={() => {
-                      setEditingTitle(false)
-                      saveWorldField('title', titleValue)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setEditingTitle(false)
-                        saveWorldField('title', titleValue)
-                      } else if (e.key === 'Escape') {
-                        setEditingTitle(false)
-                        setTitleValue(world?.title || '')
-                      }
-                    }}
-                    className="w-full truncate text-lg font-bold text-slate-800 bg-transparent border-b border-blue-400 outline-none px-0 py-0"
-                  />
-                ) : (
-                  <h1
-                    className="group/title flex items-center gap-1.5 truncate text-lg font-bold text-slate-800 cursor-pointer"
-                    onClick={() => setEditingTitle(true)}
-                  >
-                    <span className="truncate">{world?.title || 'World Slice'}</span>
-                    <Pencil className="h-3.5 w-3.5 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
-                  </h1>
-                )}
-                {editingSummary ? (
-                  <input
-                    autoFocus
-                    value={summaryValue}
-                    onChange={(e) => setSummaryValue(e.target.value)}
-                    onBlur={() => {
-                      setEditingSummary(false)
-                      saveWorldField('summary', summaryValue)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setEditingSummary(false)
-                        saveWorldField('summary', summaryValue)
-                      } else if (e.key === 'Escape') {
-                        setEditingSummary(false)
-                        setSummaryValue(world?.summary || '')
-                      }
-                    }}
-                    className="w-full truncate text-xs text-slate-500 bg-transparent border-b border-blue-400 outline-none px-0 py-0 mt-0.5 max-w-[260px]"
-                  />
-                ) : (
-                  <p
-                    className="group/summary flex items-center gap-1 truncate text-xs text-slate-500 max-w-[260px] cursor-pointer mt-0.5"
-                    onClick={() => setEditingSummary(true)}
-                  >
-                    <span className="truncate">{world?.summary || worldRecord.worldPrompt}</span>
-                    <Pencil className="h-3 w-3 text-slate-300 opacity-0 group-hover/summary:opacity-100 transition-opacity shrink-0" />
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Right: tick controls */}
-            <div className="flex items-center gap-2">
-              {/* Manual Snapshot Button */}
-              <button
-                onClick={handleManualSnapshot}
-                disabled={!world}
-                data-testid="manual-snapshot-button"
-                className="flex items-center gap-1.5 rounded-full bg-purple-50 border border-purple-200 px-3.5 py-1.5 text-sm font-medium text-purple-600 transition-all duration-200 hover:bg-purple-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                title="Create manual snapshot"
-              >
-                <Camera className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Snapshot</span>
-              </button>
-
-              {/* Tick badge */}
-              <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
-                <span className="text-xs font-medium text-slate-500">Tick</span>
-                <span className="min-w-[1.5rem] text-center text-sm font-bold text-slate-800">
-                  {world?.tick || 0}
-                </span>
-              </div>
-
-              {/* Auto-advance tick count */}
-              <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5">
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={autoAdvanceTicks}
-                  onChange={(e) => setAutoAdvanceTicks(Math.max(1, parseInt(e.target.value) || 10))}
-                  className="w-10 rounded bg-transparent px-1 py-0.5 text-xs text-center text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  disabled={autoAdvancing}
-                />
-                <span className="text-xs text-slate-400 hidden sm:inline">ticks</span>
-              </div>
-
-              {/* Auto-advance toggle */}
-              <button
-                onClick={toggleAutoAdvance}
-                disabled={!world || world.agents.npcs.length === 0 || advancing}
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
-                  autoAdvancing
-                    ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-                    : 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'
-                }`}
-              >
-                {autoAdvancing ? (
-                  <Pause className="h-3.5 w-3.5" />
-                ) : (
-                  <Play className="h-3.5 w-3.5" />
-                )}
-                <span className="hidden sm:inline">{autoAdvancing ? 'Stop' : 'Auto'}</span>
-              </button>
-
-              {/* Single tick advance */}
-              <button
-                onClick={handleAdvanceTime}
-                disabled={advancing || !world || world.agents.npcs.length === 0 || autoAdvancing}
-                className="flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3.5 py-1.5 text-sm font-medium text-blue-600 transition-all duration-200 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <SkipForward className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{advancing ? 'Running...' : '+1 Tick'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+    <section className={`workspace-body${graphOpen?' with-graph':''}`}>
+      {graphOpen&&<div className="graph-column"><GraphView worldId={worldId} refreshKey={graphRefreshKey} building={record?.graphSyncStatus==='processing'} onRefresh={()=>{setGraphRefreshKey((key)=>key+1);void loadGraphStats()}} onToggleMaximize={()=>setGraphOpen(false)}/></div>}
+      <div className="task-column">
+        {step===1&&<StepGraphBuild world={record} ontology={ontology} job={job} graphStats={{...graphStats,types:ontology?.entityTypes?.length||0}} logs={logs} starting={starting} onStartExtraction={startExtraction} onNextStep={()=>goStep(2)}/>}
+        {step===2&&<StepEnvSetup world={record} agents={agents} logs={logs} confirming={confirming} onConfirmVisibility={confirmVisibility} onNextStep={()=>goStep(3)} onGoBack={()=>goStep(1)}/>}
+        {step===3&&<NovelStudioPanel worldId={worldId} tick={tick} onWorldUpdate={(next)=>{setRecord((current:any)=>current?{...current,snapshot:next}:current);setGraphRefreshKey((key)=>key+1)}}/>}
+        {step===4&&<StepReport world={record} tick={tick} actionable={actionable} logs={logs} onLog={addLog}/>}
+        {step===5&&<StepInteraction world={record} snapshot={record?.snapshot} logs={logs} onLog={addLog} onWorldUpdate={(next)=>{setRecord((current:any)=>current?{...current,snapshot:next}:current);setGraphRefreshKey((key)=>key+1)}}/>}
       </div>
+    </section>
 
-      {/* ===== Tick Summary / Chronicle ===== */}
-      {world.tick_summary && (
-        <div className="mx-auto max-w-7xl px-6 pt-5">
-          <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm border-l-4 border-l-blue-500">
-            <div className="mb-3 flex items-center gap-2.5">
-              <span className="text-base font-semibold text-slate-800">
-                Tick {world.tick}
-              </span>
-              <div className="h-px flex-1 bg-slate-100" />
-            </div>
-            <div className="text-base leading-relaxed text-slate-600 whitespace-pre-line">
-              {world.tick_summary}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Main Content ===== */}
-      <div className="mx-auto max-w-7xl p-6">
-        <div className="grid gap-5 lg:grid-cols-12">
-          {/* Chat column */}
-          <div className="lg:col-span-5">
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              <ChatShell
-                world={world}
-                onWorldUpdate={(updatedWorld) => {
-                  setWorld(updatedWorld)
-                  localStorage.setItem(`world_${worldId}`, JSON.stringify(updatedWorld))
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Tabs column */}
-          <div className="lg:col-span-7">
-            {/* Tab Navigation */}
-            <div className="mb-4 flex gap-1 overflow-x-auto pb-1 scrollbar-none">
-              {TABS.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
-                    activeTab === key
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-                  }`}
-                  onClick={() => setActiveTab(key)}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Content */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-              {activeTab === 'world' && <PanelShell world={world} />}
-              {activeTab === 'observer' && <AgentObserverPanel world={world} />}
-              {activeTab === 'agents' && (
-                <AgentGeneratorPanel
-                  worldId={worldId}
-                  world={world}
-                  onWorldUpdate={setWorld}
-                />
-              )}
-              {activeTab === 'narratives' && <NarrativePanel world={world} />}
-              {activeTab === 'social' && <SocialNetworkPanel world={world} />}
-              {activeTab === 'timeline' && <NarrativeTimelinePanel world={world} />}
-              {activeTab === 'houtu' && <HoutuPanel world={world} />}
-              {activeTab === 'events' && <EventsPanel world={world} />}
-              {activeTab === 'stats' && <SystemStatsPanel world={world} />}
-              {activeTab === 'snapshots' && (
-                <div className="p-6">
-                  <SnapshotTimelinePanel
-                    worldId={worldId}
-                    onRestore={handleRestoreSnapshot}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-    </>
-  )
+    <footer className="workspace-footer"><button onClick={()=>goStep(step-1)} disabled={step===1}><ChevronLeft size={15}/>上一步</button><div><CircleDot size={13}/><span>{STEPS[step-1].name}</span><i>{step}/5</i></div><button className="next" onClick={()=>goStep(step+1)} disabled={step===5}>下一步<ChevronRight size={15}/></button></footer>
+  </main>
 }

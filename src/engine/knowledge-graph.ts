@@ -5,7 +5,8 @@
 
 import type { PersonalAgentState, WorldSlice } from '@/domain/world'
 
-export type NodeType = 'agent' | 'location' | 'organization' | 'event' | 'concept' | 'plot'
+/** Runtime ontology identifier. Genre-specific values are never platform constants. */
+export type NodeType = string
 
 export type KnowledgeNode = {
   id: string
@@ -17,18 +18,8 @@ export type KnowledgeNode = {
   updated_at: number  // tick
 }
 
-export type RelationType = 
-  | 'knows'           // agent knows agent
-  | 'likes'           // agent likes agent
-  | 'dislikes'        // agent dislikes agent
-  | 'works_for'       // agent works for organization
-  | 'located_in'      // agent/organization located in location
-  | 'participates_in' // agent participates in plot/event
-  | 'caused_by'       // event caused by agent
-  | 'related_to'      // generic relation
-  | 'protagonist_of'  // agent is protagonist of plot
-  | 'antagonist_of'   // agent is antagonist of plot
-  | 'supports'        // agent supports plot
+/** Runtime relation identifier supplied by the current world's ontology. */
+export type RelationType = string
 
 export type KnowledgeEdge = {
   id: string

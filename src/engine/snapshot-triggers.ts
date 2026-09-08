@@ -60,9 +60,11 @@ export function detectTensionClimax(
 }
 
 function readGlobalTension(world: WorldSlice): number {
-  return world.systems.tension?.globalTension
-    ?? (world.systems as { dramaticTension?: { globalTension?: number } }).dramaticTension?.globalTension
-    ?? 0;
+  const legacyCanonical = (world.systems.tension as unknown as { globalTension?: number } | undefined)?.globalTension
+  if (legacyCanonical !== undefined) return legacyCanonical
+  const current = world.systems.tension?.tensions
+  if (current) return Math.max(0, ...Object.values(current).map((item) => item.level))
+  return (world.systems as { dramaticTension?: { globalTension?: number } }).dramaticTension?.globalTension ?? 0;
 }
 
 /**

@@ -9,9 +9,11 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'World Slice',
-  themeColor: '#FAFAFA',
+  title: 'SeedWorld · 小说世界推演',
+  description: '从世界资料、动态图谱和角色推演生成逻辑一致的小说章节。',
 }
+
+export const viewport = { themeColor: '#f6f5f1' }
 
 export default function RootLayout({
   children,
@@ -19,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="zh-CN" className={inter.variable}>
       <body className={inter.className}>{children}</body>
     </html>
   )

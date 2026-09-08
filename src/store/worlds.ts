@@ -51,10 +51,10 @@ function generateUUID(): string {
   })
 }
 
-export function createWorld(input: { worldPrompt: string }): WorldRecord {
+export function createWorld(input: { worldPrompt: string; id?: string }): WorldRecord {
   const now = new Date().toISOString()
   const record: WorldRecord = {
-    id: generateUUID(),
+    id: input.id || generateUUID(),
     worldPrompt: input.worldPrompt,
     createdAt: now,
     updatedAt: now,
@@ -62,6 +62,20 @@ export function createWorld(input: { worldPrompt: string }): WorldRecord {
   const worlds = readAll()
   writeAll([record, ...worlds])
   return record
+}
+
+/** Copies legacy browser worlds to SQLite while retaining the browser backup. */
+export async function migrateLegacyWorlds(): Promise<{ migrated: number; skipped: number }> {
+  const worlds = readAll(); let migrated = 0; let skipped = 0
+  for (const world of worlds) {
+    const response = await fetch('/api/worlds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: world.id, worldPrompt: world.worldPrompt }) })
+    if (response.ok) {
+      migrated++
+      if (world.worldSnapshot) await fetch(`/api/worlds/${world.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshot: world.worldSnapshot, title: world.worldSnapshot.title, summary: world.worldSnapshot.summary }) })
+    } else if (response.status === 409) skipped++
+  }
+  localStorage.setItem('worlds_sqlite_migration', JSON.stringify({ completedAt: new Date().toISOString(), migrated, skipped }))
+  return { migrated, skipped }
 }
 
 export function updateWorld(id: string, patch: Partial<WorldRecord>): WorldRecord | null {

@@ -1,30 +1,34 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const anthropicCtor = vi.fn().mockImplementation(() => ({
-  messages: {
-    stream: () => ({
-      finalMessage: async () => ({ content: [{ type: 'text', text: 'summary' }] }),
-    }),
+const mocks = vi.hoisted(() => ({ constructor: vi.fn(), create: vi.fn() }))
+
+vi.mock('openai', () => ({
+  default: class OpenAIMock {
+    chat = { completions: { create: mocks.create } }
+    constructor(options: unknown) { mocks.constructor(options) }
   },
 }))
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: anthropicCtor,
-}))
-
-describe('anthropic module initialization', () => {
-  it('does not construct a client at module import time', async () => {
-    await import('./anthropic')
-
-    expect(anthropicCtor).not.toHaveBeenCalled()
+describe('OpenAI-compatible model facade', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    mocks.constructor.mockClear()
+    mocks.create.mockReset()
+    process.env.WORLD_SLICE_API_KEY = 'test-key'
+    process.env.WORLD_SLICE_API_BASE = 'https://openrouter.ai/api/v1'
+    process.env.WORLD_SLICE_MODEL = 'openrouter/free'
   })
 
-  it('constructs a client only when summarizeObservation is called', async () => {
+  it('does not construct a client at module import time', async () => {
+    await import('./anthropic')
+    expect(mocks.constructor).not.toHaveBeenCalled()
+  })
+
+  it('streams text through the configured compatible client on demand', async () => {
+    mocks.create.mockResolvedValue((async function* () { yield { choices: [{ delta: { content: 'summary' } }] } })())
     const { summarizeObservation } = await import('./anthropic')
-
-    const result = await summarizeObservation({ prompt: 'test', world: { tick: 1 } })
-
-    expect(result).toBe('summary')
-    expect(anthropicCtor).toHaveBeenCalledTimes(1)
+    await expect(summarizeObservation({ prompt: 'test', world: { tick: 1 } })).resolves.toBe('summary')
+    expect(mocks.constructor).toHaveBeenCalledTimes(1)
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ model: 'openrouter/free', stream: true }))
   })
 })

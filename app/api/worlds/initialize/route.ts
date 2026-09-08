@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { generateInitialWorld } from '@/server/llm/world-generator'
 import { generatePersonalAgents } from '@/server/llm/agent-generator'
 import { createAnthropicClient, getModel, streamText } from '@/server/llm/anthropic'
+import { getWorld, updateWorld } from '@/server/novel-repository'
 
 /**
  * Full world initialization flow (emergent):
@@ -69,6 +70,8 @@ export async function POST(request: Request) {
 
     console.log('=== World initialization complete ===')
 
+    if (worldId && getWorld(worldId)) updateWorld(worldId, { snapshot: world, title: world.title, summary: world.summary })
+
     return NextResponse.json({
       success: true,
       world,
@@ -89,14 +92,14 @@ export async function POST(request: Request) {
 }
 
 /**
- * Generate a prologue narration introducing the world, its characters, and the undercurrents.
+ * Generate a focused opening scene without dumping the full cast or setting.
  */
 async function generatePrologue(world: typeof import('@/domain/world').createInitialWorldSlice extends () => infer R ? R : never): Promise<string> {
   const client = createAnthropicClient()
   const model = getModel()
 
   const agents = world.agents.npcs
-  const castList = agents.map((a: any) => {
+  const castList = agents.slice(0, 3).map((a: any) => {
     const relDescriptions = Object.entries(a.relations || {})
       .slice(0, 3)
       .map(([targetSeed, value]) => {
@@ -111,7 +114,7 @@ async function generatePrologue(world: typeof import('@/domain/world').createIni
 
   const worldLang = world.config?.language || 'en'
 
-  const prompt = `You are a narrator introducing a new world and its characters to the audience for the first time.
+  const prompt = `You are writing the opening scene of a long-form novel.
 
 World setting:
 ${world.environment.description}
@@ -125,10 +128,12 @@ Write an opening narration (prologue) for this world. This is tick 0 — nothing
 
 Requirements:
 - Introduce the setting vividly — what does this place look, smell, feel like?
-- Introduce each major character briefly — who they are, what they want, and what threatens them
-- Hint at the conflicts and alliances that are about to unfold — the fault lines
-- End with a sense of anticipation: something is about to begin
-- Tone: atmospheric, cinematic, like the opening of a novel or TV series
+- Use one limited viewpoint and include only what that viewpoint can perceive or reasonably know
+- Begin with a concrete action, anomaly, or local conflict
+- Do not introduce the full cast and do not explain the whole world
+- Reveal no more than one unfamiliar rule unless the scene demonstrates it
+- End on a decision, consequence, or sharper question
+- Tone: immediate and novelistic, never an encyclopedia or cast list
 - Length: 300-500 words
 - Write in the same language as the world setting above (detected: ${worldLang})
 

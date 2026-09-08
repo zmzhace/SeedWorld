@@ -190,7 +190,6 @@ function applyTensionConsequences(world: WorldSlice, consequences: SituationCons
 
     if (existing) {
       existing.level = clamp01(Math.max(existing.level, consequence.strength))
-      existing.updated_at = tick as never
       continue
     }
 

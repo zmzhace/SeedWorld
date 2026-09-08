@@ -439,7 +439,7 @@ export async function runWorldTick(world: WorldSlice, options: OrchestratorOptio
     ? buildWorldPressureProfile(next, { wave: 2 })
     : waveOneWorldPressureProfile
 
-  const structuralConsequences = allResults.flatMap((result) => result.patch?.situation?.consequences ?? [])
+  const structuralConsequences = (allResults as Array<{ patch?: { situation?: { consequences?: never[] } } }>).flatMap((result) => result.patch?.situation?.consequences ?? [])
   applySituationConsequences({
     world: next,
     consequences: structuralConsequences,

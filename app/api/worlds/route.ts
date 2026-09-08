@@ -1,44 +1,20 @@
 import { NextResponse } from 'next/server'
-import { generateInitialWorld } from '@/server/llm/world-generator'
+import { createWorld, listWorlds } from '@/server/novel-repository'
+import { updateWorld } from '@/server/novel-repository'
+import { createInitialWorldSlice } from '@/domain/world'
 
-// In-memory storage for world snapshots (keyed by worldId)
-const worldSnapshots = new Map<string, any>()
+export const runtime = 'nodejs'
+
+export async function GET() { return NextResponse.json({ worlds: listWorlds() }) }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const worldPrompt = String(body?.worldPrompt ?? '')
-    const worldId = String(body?.worldId ?? '')
-    
-    if (!worldPrompt.trim()) {
-      return NextResponse.json(
-        { error: 'worldPrompt is required' },
-        { status: 400 }
-      )
-    }
-
-    console.log('Generating world with prompt:', worldPrompt)
-    
-    // Generate initial world
-    const world = await generateInitialWorld({ worldPrompt })
-    
-    // Set the world_id if provided
-    if (worldId) {
-      world.world_id = worldId
-      worldSnapshots.set(worldId, world)
-    }
-    
-    console.log('World generated:', world.world_id)
-    
-    return NextResponse.json({
-      success: true,
-      world,
-    })
+    const world = createWorld({ id: body.id, prompt: String(body.worldPrompt || body.prompt || ''), title: body.title, writingSettings: body.writingSettings })
+    const snapshot = createInitialWorldSlice(); snapshot.world_id = world.id; snapshot.title = body.title || undefined; snapshot.summary = String(body.worldPrompt || body.prompt || '').slice(0, 160); snapshot.environment.description = String(body.worldPrompt || body.prompt || '')
+    return NextResponse.json(updateWorld(world.id, { snapshot, title: snapshot.title, summary: snapshot.summary }), { status: 201 })
   } catch (error) {
-    console.error('Failed to generate world:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate world: ' + (error as Error).message },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: message.includes('UNIQUE') ? 409 : 400 })
   }
 }

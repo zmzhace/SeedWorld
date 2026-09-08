@@ -120,7 +120,7 @@ export class VectorDatabase {
     
     const { topK = 10, threshold = 0.7, filter } = options
     
-    const results = await this.client.search(collection, {
+    const results = await (this.client as unknown as { search: (name: string, input: Record<string, unknown>) => Promise<Array<{ id: string | number; score: number; payload?: Record<string, unknown> }>> }).search(collection, {
       vector,
       limit: topK,
       score_threshold: threshold,

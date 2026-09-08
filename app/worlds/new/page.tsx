@@ -2,194 +2,30 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { createWorld } from '@/store/worlds'
-import { ArrowLeft, Loader2, Mountain, Users, Swords, Pen } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpenText, Check, FileText, Loader2, Settings2, Upload } from 'lucide-react'
+import { createWorld as createLegacyMirror } from '@/store/worlds'
+import './new-world.css'
 
-export default function NewWorldPage() {
-  const router = useRouter()
-  const [prompt, setPrompt] = React.useState('')
-  const [creating, setCreating] = React.useState(false)
+type FormState={title:string;prompt:string;material:string;genre:string;audience:string;targetWords:number;pacing:'slow'|'balanced'|'fast'}
+const initial:FormState={title:'',prompt:'',material:'',genre:'',audience:'',targetWords:2500,pacing:'balanced'}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!prompt.trim()) return
-
-    console.log('Creating world with prompt:', prompt)
-    setCreating(true)
-    try {
-      // Create world record first to get ID
-      const worldRecord = createWorld({ worldPrompt: prompt })
-      console.log('World record created:', worldRecord)
-
-      // Call complete initialization: generate world + agents
-      // Note: This can take 3-5 minutes due to LLM generation
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000) // 10 minutes
-
-      const response = await fetch('/api/worlds/initialize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          worldPrompt: prompt,
-          worldId: worldRecord.id
-        }),
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to initialize world')
-      }
-
-      const data = await response.json()
-      console.log('World initialized:', data.summary)
-
-      // Save generated world to localStorage
-      localStorage.setItem(`world_${worldRecord.id}`, JSON.stringify(data.world))
-
-      router.push(`/worlds/${worldRecord.id}`)
-    } catch (error) {
-      console.error('Failed to create world:', error)
-      alert('创建世界失败: ' + (error as Error).message)
-      setCreating(false)
-    }
-  }
-
-  const tips = [
-    {
-      icon: Mountain,
-      title: 'Environment',
-      description: 'Geography, climate, terrain, and natural surroundings',
-    },
-    {
-      icon: Users,
-      title: 'Society',
-      description: 'Culture, institutions, power dynamics, and social order',
-    },
-    {
-      icon: Swords,
-      title: 'Conflict',
-      description: 'Core tensions, opposing forces, and sources of pressure',
-    },
-    {
-      icon: Pen,
-      title: 'Narrative Tone',
-      description: 'Overall atmosphere, style, and thematic direction',
-    },
-  ]
-
-  return (
-    <main className="min-h-screen bg-[#FAFAFA] p-6 md:p-8">
-      <div className="mx-auto max-w-2xl">
-        {/* Back button */}
-        <button
-          onClick={() => router.push('/worlds')}
-          className="mb-8 flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-700"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to worlds</span>
-        </button>
-
-        {/* Form card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-          {/* Header */}
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-800">
-              Create New World
-            </h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Describe the world you want to create. AI will generate the initial environment, social context, and personalized agents.
-            </p>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label
-                htmlFor="prompt"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                World Description
-              </label>
-              <textarea
-                id="prompt"
-                rows={6}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                placeholder="A quiet coastal town where residents live simple lives...&#10;&#10;Or: A cyberpunk megacity governed by rival AI factions..."
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                disabled={creating}
-              />
-              <p className="mt-2 text-xs text-slate-400">
-                The more detail you provide, the richer the generated world will be.
-              </p>
-            </div>
-
-            {/* Loading state */}
-            {creating && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <div className="flex items-start gap-3">
-                  <Loader2 className="mt-0.5 h-5 w-5 animate-spin text-blue-500" />
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-blue-700">
-                      Generating world...
-                    </h3>
-                    <div className="mt-2 space-y-1 text-xs text-blue-500">
-                      <p>Creating world state and environment...</p>
-                      <p>Generating personalized agents...</p>
-                      <p>Preparing emergent narrative system...</p>
-                      <p className="mt-2 text-blue-400">This may take 3-5 minutes. Please wait...</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-500 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-blue-600 disabled:active:scale-100"
-              disabled={creating || !prompt.trim()}
-            >
-              {creating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Creating...</span>
-                </>
-              ) : (
-                <span>Create World</span>
-              )}
-            </button>
-          </form>
-
-          {/* Tips grid */}
-          <div className="mt-8 border-t border-slate-100 pt-8">
-            <h3 className="mb-4 text-xs font-medium uppercase tracking-wider text-slate-400">
-              Tips for a great world
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {tips.map((tip) => (
-                <div
-                  key={tip.title}
-                  className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 shadow-sm"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <tip.icon className="h-4 w-4 text-slate-400" />
-                    <h4 className="text-xs font-medium text-slate-700">
-                      {tip.title}
-                    </h4>
-                  </div>
-                  <p className="text-xs leading-relaxed text-slate-500">
-                    {tip.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-  )
+export default function NewWorldPage(){
+  const router=useRouter();const [form,setForm]=React.useState(initial);const [files,setFiles]=React.useState<File[]>([]);const [creating,setCreating]=React.useState(false);const [error,setError]=React.useState('');const [stage,setStage]=React.useState('')
+  const set=<K extends keyof FormState>(key:K,value:FormState[K])=>setForm((current)=>({...current,[key]:value}))
+  async function submit(event:React.FormEvent){event.preventDefault();if(!form.prompt.trim()||creating)return;setCreating(true);setError('');try{setStage('创建作品空间');const createdResponse=await fetch('/api/worlds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:form.title||undefined,worldPrompt:form.prompt,writingSettings:{genre:form.genre,audience:form.audience,language:'zh',narration:'third_limited',targetWords:form.targetWords,pacing:form.pacing,chapterMode:'manual'}})});const created=await createdResponse.json();if(!createdResponse.ok)throw new Error(created.error||'创建失败');createLegacyMirror({id:created.id,worldPrompt:form.prompt});if(created.snapshot)localStorage.setItem(`world_${created.id}`,JSON.stringify(created.snapshot));setStage('保存并解析原始资料');const data=new FormData();data.set('text',[form.prompt,form.material].filter(Boolean).join('\n\n'));files.forEach((file)=>data.append('files',file));const sourceResponse=await fetch(`/api/worlds/${created.id}/sources`,{method:'POST',body:data});const source=await sourceResponse.json();if(!sourceResponse.ok)throw new Error(source.error||'资料处理失败');setStage('启动动态本体与图谱抽取');const extractResponse=await fetch(`/api/worlds/${created.id}/extractions`,{method:'POST'});const job=await extractResponse.json();if(!extractResponse.ok)throw new Error(job.error||'抽取启动失败');router.push(`/worlds/${created.id}?job=${job.id}&step=1`)}catch(cause){setError(cause instanceof Error?cause.message:String(cause));setCreating(false)}}
+  return <main className="new-world"><header className="new-world-head"><button onClick={()=>router.push('/')}><ArrowLeft size={15}/>返回首页</button><strong>SEEDWORLD</strong></header><div className="new-world-shell">
+    <section className="new-world-intro"><h1>建立一部<br/>可推演的作品。</h1><p>这里保存的不是一次性提示词，而是作品的长期底稿。系统会据此生成独立本体，而不把任何题材规则写死在平台里。</p></section>
+    <form className="new-world-form" onSubmit={submit}><section className="world-materials"><h2 className="form-section-title"><BookOpenText size={17}/>作品底稿</h2>
+      <Field label="作品名称" optional><input value={form.title} onChange={(event)=>set('title',event.target.value)} placeholder="可以稍后再定"/></Field>
+      <Field label="核心世界与冲突"><textarea required rows={7} value={form.prompt} onChange={(event)=>set('prompt',event.target.value)} placeholder="说清世界如何运转、各方为何冲突，以及你想观察什么。"/></Field>
+      <Field label="补充设定" optional><textarea rows={9} value={form.material} onChange={(event)=>set('material',event.target.value)} placeholder="人物、势力、历史、规则、谣言、未公开秘密……"/></Field>
+      <label className="file-picker"><Upload size={17}/>{files.length?`已选择 ${files.length} 份资料`:'选择资料文件'}<span>PDF / MD / TXT</span><input type="file" multiple accept=".pdf,.md,.markdown,.txt,text/plain,application/pdf" hidden onChange={(event)=>setFiles(Array.from(event.target.files||[]))}/></label>
+    </section><aside className="world-settings"><h2 className="form-section-title"><Settings2 size={17}/>写作默认值</h2><p className="setting-note">这些参数只影响本作品的成章方式，之后仍可修改和版本化。</p>
+      <Field label="题材" optional><input value={form.genre} onChange={(event)=>set('genre',event.target.value)} placeholder="留空则自动识别"/></Field><Field label="目标读者" optional><input value={form.audience} onChange={(event)=>set('audience',event.target.value)} placeholder="例如：快节奏网文读者"/></Field><Field label="单章目标字数"><input type="number" min={800} max={10000} value={form.targetWords} onChange={(event)=>set('targetWords',Number(event.target.value))}/></Field><Field label="默认节奏"><select value={form.pacing} onChange={(event)=>set('pacing',event.target.value as FormState['pacing'])}><option value="slow">舒缓</option><option value="balanced">均衡</option><option value="fast">快速</option></select></Field>
+      {error&&<div className="creation-error" role="alert"><FileText size={15}/>{error}</div>}{creating&&<div className="creation-progress"><Loader2 className="nw-spin" size={15}/><span>{stage}<br/>进入作品后会继续显示真实阶段。</span></div>}
+      <button className="submit-world" disabled={creating||!form.prompt.trim()}><span>{creating?'正在创建……':'创建并抽取图谱'}</span><ArrowRight size={16}/></button>
+      <div className="create-principles"><div><Check size={13}/>原文与来源保留</div><div><Check size={13}/>同内容不重复提交</div><div><Check size={13}/>导入批次可撤销</div></div>
+    </aside></form>
+  </div></main>
 }
+function Field({label,optional,children}:{label:string;optional?:boolean;children:React.ReactNode}){return <label className="nw-field"><span>{label}{optional&&<small>可选</small>}</span>{children}</label>}

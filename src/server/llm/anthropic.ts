@@ -1,61 +1,59 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
 /**
- * 创建 Anthropic client 的统一工厂函数
- * 解决系统环境变量 ANTHROPIC_AUTH_TOKEN 与 .env.local 冲突的问题：
- * SDK 会自动把 ANTHROPIC_AUTH_TOKEN 写入 Authorization: Bearer header，
- * 即使我们显式传了 apiKey（写入 x-api-key header），两个 header 会冲突。
- * 所以这里统一用 defaultHeaders 覆盖 Authorization header。
+ * Compatibility facade kept under the old filename so the simulation engine
+ * can migrate providers without touching every call site. SeedWorld uses an
+ * OpenAI-compatible chat endpoint selected entirely by server-side settings.
  */
-export function createAnthropicClient() {
-  const apiKey = process.env.WORLD_SLICE_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || ''
-  const baseURL = process.env.WORLD_SLICE_API_BASE || process.env.ANTHROPIC_BASE_URL
+export type ModelMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
-  return new Anthropic({
+export function createAnthropicClient(): OpenAI {
+  const apiKey = (process.env.WORLD_SLICE_API_KEY || process.env.OPENROUTER_API_KEY || '').trim()
+  const baseURL = (process.env.WORLD_SLICE_API_BASE || 'https://qianfan.baidubce.com/v2').trim()
+  if (!apiKey) throw new Error('大模型 API Key 未配置')
+
+  const defaultHeaders = baseURL.includes('openrouter.ai')
+    ? { 'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'http://localhost:3000', 'X-Title': 'SeedWorld' }
+    : undefined
+
+  return new OpenAI({
     apiKey,
     baseURL,
-    defaultHeaders: {
-      'authorization': `Bearer ${apiKey}`,
-    },
+    timeout: 300_000,
+    maxRetries: 2,
+    defaultHeaders,
   })
 }
 
-export function getModel() {
-  return process.env.WORLD_SLICE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+export function getModel(): string {
+  return process.env.WORLD_SLICE_MODEL || process.env.OPENROUTER_MODEL || 'ernie-4.5-turbo-128k'
 }
 
-/**
- * 流式调用 LLM 并收集完整文本响应。
- * 所有 LLM 调用都必须走流式，否则超过 10 分钟会被 SDK 拒绝。
- */
+/** Stream through the configured provider and collect the complete response. */
 export async function streamText(
-  client: Anthropic,
-  params: { model: string; max_tokens: number; messages: Anthropic.MessageCreateParams['messages'] }
+  client: OpenAI,
+  params: { model: string; max_tokens: number; messages: ModelMessage[] },
 ): Promise<string> {
-  const stream = client.messages.stream({
+  const stream = await client.chat.completions.create({
     model: params.model,
     max_tokens: params.max_tokens,
     messages: params.messages,
+    stream: true,
   })
-  const response = await stream.finalMessage()
-  const textBlock = response.content.find((block) => block.type === 'text')
-  return textBlock && 'text' in textBlock ? textBlock.text : ''
+  let text = ''
+  for await (const chunk of stream) text += chunk.choices[0]?.delta?.content || ''
+  return text
 }
 
-type ObservationInput = {
-  prompt: string
-  world: unknown
-}
+type ObservationInput = { prompt: string; world: unknown }
 
 export async function summarizeObservation(input: ObservationInput): Promise<string> {
   return streamText(createAnthropicClient(), {
     model: getModel(),
     max_tokens: 2048,
-    messages: [
-      {
-        role: 'user',
-        content: `Generate a natural language observation summary.\n\nUser prompt: ${input.prompt}\nWorld: ${JSON.stringify(input.world)}`,
-      },
-    ],
+    messages: [{ role: 'user', content: `Generate a natural language observation summary.\n\nUser prompt: ${input.prompt}\nWorld: ${JSON.stringify(input.world)}` }],
   })
 }
