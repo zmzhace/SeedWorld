@@ -56,11 +56,12 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
               </div>
             )}
             {phase === 0 && (!job || ['failed'].includes(job.status)) && (
-              <div className="progress-section">
+              <div className="progress-section" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button className="action-btn" disabled={starting} onClick={onStartExtraction}>
                   {starting && <span className="spinner-sm"></span>}
                   {starting ? '启动中' : '开始抽取 ➝'}
                 </button>
+                <ProbeButton />
               </div>
             )}
 
@@ -209,5 +210,38 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
         </div>
       </div>
     </div>
+  )
+}
+
+function ProbeButton() {
+  const [state, setState] = React.useState<'idle' | 'probing' | 'ok' | 'fail'>('idle')
+  const [detail, setDetail] = React.useState('')
+  const probe = async () => {
+    setState('probing')
+    setDetail('')
+    try {
+      const response = await fetch('/api/llm/probe', { method: 'POST' })
+      const value = await response.json()
+      if (value.ok) {
+        setState('ok')
+        setDetail(`${value.model} · ${value.latencyMs}ms`)
+      } else {
+        setState('fail')
+        setDetail(`[${value.status || 'ERR'}] ${value.error}`.slice(0, 160))
+      }
+    } catch (cause) {
+      setState('fail')
+      setDetail(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+      <button className="action-btn" disabled={state === 'probing'} onClick={probe} style={{ background: '#FFF', color: '#333', border: '1px solid #E0E0E0' }}>
+        {state === 'probing' && <span className="spinner-sm"></span>}
+        {state === 'probing' ? '探活中' : '测试连接'}
+      </button>
+      {state === 'ok' && <span className="badge success">连通 · {detail}</span>}
+      {state === 'fail' && <span className="badge" style={{ background: '#FDECEA', color: '#B3261E' }} title={detail}>失败 · {detail}</span>}
+    </span>
   )
 }

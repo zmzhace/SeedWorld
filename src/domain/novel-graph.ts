@@ -112,6 +112,8 @@ export type WritingSettings = {
   rating: string
   forbiddenContent: string[]
   chapterMode: 'manual' | 'automatic'
+  /** Style anchors: never trimmed from chapter prompts (ainovel-cli #91 anchors idea). */
+  styleAnchors: string[]
 }
 
 export const DEFAULT_WRITING_SETTINGS: WritingSettings = {
@@ -124,6 +126,7 @@ export const DEFAULT_WRITING_SETTINGS: WritingSettings = {
   rating: 'general',
   forbiddenContent: [],
   chapterMode: 'manual',
+  styleAnchors: [],
 }
 
 export type ImportJob = {

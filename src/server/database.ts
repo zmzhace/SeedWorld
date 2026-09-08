@@ -165,6 +165,12 @@ export function getDatabase(): DatabaseSync {
       created_at TEXT NOT NULL,
       UNIQUE(world_id, chapter_number, version)
     );
+    CREATE TABLE IF NOT EXISTS compass (
+      world_id TEXT PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+      long_json TEXT NOT NULL,
+      current_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS outbox (
       id TEXT PRIMARY KEY,
       world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,

@@ -3,6 +3,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { WorldOntology } from '@/domain/novel-graph'
 import { chatJson } from '@/server/llm/openai-compat'
+import { ONTOLOGY_RULES } from '@/server/llm/rules'
 import { splitText } from '@/server/source-ingestion'
 
 /**
@@ -209,6 +210,7 @@ export async function generateOntology(
   const maxTypes = Number(process.env.SEEDWORLD_ONTOLOGY_MAX_TYPES || MAX_ONTOLOGY_TYPES)
   const excerpt = buildDocumentContext(texts)
   const prompt = `You design a knowledge-graph ontology for a fiction simulation platform.
+${ONTOLOGY_RULES}
 Return JSON ONLY, no other text, following this exact schema:
 \`\`\`json
 {
@@ -228,9 +230,6 @@ Naming rules (strict — types with bad names are discarded):
 - Field "type" is one of: text, integer, float, boolean.
 
 Content rules:
-- Analyze only this work. Generate types that fit its actual material. Do not assume energy, abilities, romance, social media, or any genre convention unless present.
-- Concrete people, groups, places, events, objects, species, natural or supernatural phenomena, abstract concepts and world rules are all valid entities.
-- Facts must later support objective truth, public narrative and character belief. Visibility and conditional existence are generic rules, not hard-coded story types.
 - At most ${maxTypes} entity types and ${maxTypes} relation types. Mark types that possess agency as actionable.
 
 SOURCE MATERIAL:
