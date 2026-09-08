@@ -135,6 +135,66 @@ async function runExtraction(jobId: string) {
   })
 }
 
+export async function importMiroFishGraph(worldId: string, graphId: string) {
+  const contentHash = sha256(`mirofish:${graphId}`)
+  const created = createImport(worldId, contentHash)
+  if (created.duplicate) return { importId: created.id, duplicate: true }
+  const job = createJob(worldId, created.id)
+  void (async () => {
+    try {
+      updateJob(job.id, { status: 'syncing', stage: 'mirofish', progress: 30, message: `正在读取 ${graphId}` })
+      const graph = await readGraph(graphId)
+      const labels = [
+        ...new Set(
+          graph.nodes.flatMap((node) => node.labels || []).filter((label) => !['Entity', 'Node'].includes(label)),
+        ),
+      ]
+      const ontology: WorldOntology = {
+        id: randomUUID(),
+        worldId,
+        version: (getLatestOntology(worldId)?.version || 0) + 1,
+        rationale: '从 MiroFish 图谱标签导入',
+        createdAt: new Date().toISOString(),
+        entityTypes: labels.slice(0, 10).map((name) => ({
+          name,
+          displayName: name,
+          description: `Imported ${name}`,
+          fields: [{ name: 'details', type: 'text' as const, description: 'Additional details.' }],
+          actionable: /Person|Character|Actor|Executive|Figure/i.test(name),
+        })),
+        relationTypes: [...new Set(graph.edges.map((edge) => edge.name))].slice(0, 10).map((name) => ({
+          name,
+          displayName: name,
+          description: `Imported ${name}`,
+          fields: [{ name: 'details', type: 'text' as const, description: 'Additional details.' }],
+          sourceTargets: [],
+        })),
+      }
+      saveOntology(ontology)
+      persistGraph(worldId, created.id, graph, ontology)
+      updateImport(created.id, 'completed', { graphId })
+      updateWorld(worldId, { sourceGraphId: graphId, graphSyncStatus: 'ready', visibilityConfirmed: false })
+      updateJob(job.id, {
+        status: 'completed',
+        stage: 'completed',
+        progress: 100,
+        message: `已导入 ${graph.nodes.length} 个节点和 ${graph.edges.length} 条边`,
+      })
+      syncActionableAgents(worldId)
+    } catch (error) {
+      updateJob(job.id, {
+        status: 'failed',
+        stage: 'failed',
+        progress: 100,
+        message: '导入失败',
+        error: error instanceof Error ? error.message : String(error),
+      })
+      updateImport(created.id, 'failed')
+    }
+  })()
+  return { importId: created.id, jobId: job.id, duplicate: false }
+}
+
 function syncActionableAgents(worldId: string) {
   const world = getDatabase().prepare('SELECT snapshot_json FROM worlds WHERE id=?').get(worldId) as
     | { snapshot_json?: string }
