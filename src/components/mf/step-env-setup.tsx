@@ -11,9 +11,43 @@ type Props = {
   onConfirmVisibility: () => void
   onNextStep: () => void
   onGoBack: () => void
+  onAgentsChanged?: () => void
 }
 
-export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibility, onNextStep, onGoBack }: Props) {
+export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibility, onNextStep, onGoBack, onAgentsChanged }: Props) {
+  const [syncState, setSyncState] = React.useState<'idle' | 'syncing' | 'ready' | 'error'>('idle')
+  const [syncMsg, setSyncMsg] = React.useState('')
+  const syncedWorldRef = React.useRef<string | null>(null)
+
+  const syncAgents = React.useCallback(async () => {
+    if (syncState === 'syncing' || !world?.id) return
+    setSyncState('syncing')
+    setSyncMsg('正在从世界档案识别可行动个体…')
+    try {
+      const response = await fetch(`/api/worlds/${world.id}/agents/sync`, {
+        method: 'POST',
+      })
+      const value = await response.json()
+      if (!response.ok) throw new Error(value.error || '行动者建立失败')
+      setSyncState('ready')
+      setSyncMsg(
+        value.added || value.removed
+          ? `已建立 ${value.candidateEntityCount} 位行动者，并修正 ${value.removed} 个误识别对象`
+          : `已自动建立 ${value.candidateEntityCount} 位行动者`,
+      )
+      await onAgentsChanged?.()
+    } catch (cause) {
+      setSyncState('error')
+      setSyncMsg(`自动建立失败：${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+  }, [onAgentsChanged, syncState, world?.id])
+
+  React.useEffect(() => {
+    if (!world?.id || world.archiveStatus !== 'ready' || syncedWorldRef.current === world.id) return
+    syncedWorldRef.current = world.id
+    void syncAgents()
+  }, [syncAgents, world?.archiveStatus, world?.id])
+
   const logRef = React.useRef<HTMLDivElement>(null)
   React.useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -36,9 +70,9 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
             </div>
           </div>
           <div className="card-content">
-            <p className="api-note">OBJECTIVE · PUBLIC NARRATIVE · CHARACTER BELIEF</p>
+            <p className="api-note">OBJECTIVE / PUBLIC NARRATIVE / CHARACTER BELIEF</p>
             <p className="description">
-              确认角色只能读取公开叙事、自身经历与个人信念。客观真相和未曝光秘密默认隔离；确认后原始资料固定为只读 Source Graph。
+              确认角色只能读取公开叙事、自身经历与个人信念。客观真相和未曝光秘密默认隔离；确认后原始资料保持只读。
             </p>
             {!confirmed ? (
               <button className="action-btn" disabled={confirming} onClick={onConfirmVisibility}>
@@ -62,8 +96,18 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
             </div>
           </div>
           <div className="card-content">
-            <p className="api-note">ACTIONABLE ENTITIES → AGENTS</p>
-            <p className="description">只有能够主动选择与行动的实体才会成为 Agent；地点、规则、事件和概念仍保留在图谱中，不会被拟人化。</p>
+            <p className="api-note">ACTIONABLE ENTITIES / AUTOMATIC MATERIALIZATION</p>
+            <p className="description">系统会自动把资料中的可行动个体建立为角色智能体。组织、地点、规则、事件和概念只保留在世界档案中，不会被误当成人物。</p>
+            <div className={`agent-sync-state ${syncState}`} role="status" aria-live="polite">
+              {syncState === 'syncing' && <span className="spinner-sm" aria-hidden="true" />}
+              <strong>{syncState === 'error' ? '需要重试' : syncState === 'ready' ? '行动者已就绪' : '等待资料编译'}</strong>
+              <span>{syncMsg || '资料编译完成后会自动执行，无需手动生成人物。'}</span>
+              {syncState === 'error' && (
+                <button className="action-btn secondary" type="button" onClick={() => void syncAgents()}>
+                  重试自动建立
+                </button>
+              )}
+            </div>
             {actionable.length > 0 ? (
               <div className="tags-container">
                 <span className="tag-label">AGENTS</span>
@@ -76,7 +120,7 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
                 </div>
               </div>
             ) : (
-              <p className="description">暂无智能体。先完成图谱抽取（可行动类型会自动同步）。</p>
+              <p className="description">尚未识别到可行动个体。系统会在资料编译完成后自动重试；若资料只有规则或地点，请先补充人物资料。</p>
             )}
           </div>
         </div>
@@ -89,13 +133,13 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
             </div>
           </div>
           <div className="card-content">
-            <p className="api-note">NEXT · SIMULATION LEDGER</p>
-            <p className="description">推演不会直接改写原设定。每轮的角色意图先由规则裁决，成立的结果才会作为增量事实写入 Evolution Graph。</p>
+            <p className="api-note">NEXT / SIMULATION LEDGER</p>
+            <p className="description">推演不会直接改写原设定。每轮的角色意图先由规则裁决，成立的结果才会写入演化事实账本。</p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="action-btn" onClick={onGoBack} style={{ background: '#FFF', color: '#333', border: '1px solid #E0E0E0' }}>
+              <button className="action-btn secondary" onClick={onGoBack}>
                 ← 上一步
               </button>
-              <button className="action-btn" disabled={!confirmed} onClick={onNextStep}>
+              <button className="action-btn" disabled={!confirmed || syncState !== 'ready' || actionable.length === 0} onClick={onNextStep}>
                 进入推演 ➝
               </button>
             </div>

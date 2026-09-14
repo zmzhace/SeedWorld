@@ -125,7 +125,7 @@ export const DEFAULT_WRITING_SETTINGS: WritingSettings = {
   pacing: 'balanced',
   rating: 'general',
   forbiddenContent: [],
-  chapterMode: 'manual',
+  chapterMode: 'automatic',
   styleAnchors: [],
 }
 
@@ -138,7 +138,6 @@ export type ImportJob = {
   progress: number
   message: string
   error?: string
-  remoteBatchId?: string
   createdAt: string
   updatedAt: string
 }

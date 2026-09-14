@@ -21,7 +21,7 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs.length])
 
-  const phase = world?.graphSyncStatus === 'ready' ? 2 : world?.graphSyncStatus === 'processing' ? 1 : 0
+  const phase = world?.archiveStatus === 'ready' ? 2 : world?.archiveStatus === 'extracting' ? 1 : 0
   const entityTypes: any[] = ontology?.entityTypes || []
   const relationTypes: any[] = ontology?.relationTypes || []
 
@@ -142,7 +142,7 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
           <div className="card-header">
             <div className="step-info">
               <span className="step-num">02</span>
-              <span className="step-title">GraphRAG 构建</span>
+              <span className="step-title">世界档案编译</span>
             </div>
             <div className="step-status">
               {phase > 1 ? (
@@ -156,7 +156,7 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
           </div>
 
           <div className="card-content">
-            <p className="api-note">ZEP CLOUD · SOURCE GRAPH · READ ONLY</p>
+            <p className="api-note">SOURCE GRAPH · READ ONLY</p>
             <p className="description">分块提交后会持续显示真实阶段和等待时间。原始资料只写入 Source；后续推演只写入 Evolution。</p>
 
             <div className="stats-grid">
@@ -187,7 +187,7 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
 
           <div className="card-content">
             <p className="api-note">NEXT · KNOWLEDGE BOUNDARY</p>
-            <p className="description">图谱已就绪。下一步检查哪些是客观真相、公开叙事或角色信念，避免角色知道不该知道的事。</p>
+            <p className="description">世界档案已就绪。下一步检查客观事实、公开叙事或角色信念，避免角色知道不该知道的事。</p>
             <button className="action-btn" disabled={phase < 2} onClick={onNextStep}>
               检查知识边界 ➝
             </button>

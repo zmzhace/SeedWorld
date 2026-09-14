@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowRight, BookOpenText, Clock3, FileText, Network, Plus } from 'lucide-react'
 import './mf-history.css'
 
-type World = { id:string; title?:string; summary?:string; prompt:string; snapshot?:any; graphSyncStatus:string; visibilityConfirmed:boolean; createdAt:string; updatedAt:string }
+type World = { id:string; title?:string; summary?:string; prompt:string; snapshot?:any; archiveStatus:string; visibilityConfirmed:boolean; createdAt:string; updatedAt:string }
 type SourceFile = { id:string; name:string }
 
 export function HistoryList() {
@@ -34,7 +34,7 @@ export function HistoryList() {
   return (
     <section className="world-library" aria-labelledby="world-library-title">
       <div className="library-heading">
-        <div><h2 id="world-library-title">作品库</h2><p>继续上一次的图谱、推演或章节。</p></div>
+        <div><h2 id="world-library-title">作品库</h2><p>继续上一次的世界档案、推演或章节。</p></div>
         <button onClick={() => router.push('/worlds/new')}><Plus size={16} />完整创建</button>
       </div>
 
@@ -47,15 +47,15 @@ export function HistoryList() {
           {worlds.map((world) => {
             const files = filesByWorld[world.id] || []
             const tick = world.snapshot?.tick || 0
-            const ready = world.graphSyncStatus === 'ready'
+            const ready = world.archiveStatus === 'ready'
             return <button className="world-row" key={world.id} onClick={() => router.push(`/worlds/${world.id}`)}>
               <div className="world-row-main">
-                <span className={`world-state ${ready ? 'ready' : world.graphSyncStatus === 'processing' ? 'working' : ''}`}><span />{ready ? '图谱就绪' : world.graphSyncStatus === 'processing' ? '正在抽取' : '待建图'}</span>
+                <span className={`world-state ${ready ? 'ready' : world.archiveStatus === 'extracting' ? 'working' : ''}`}><span />{ready ? '档案就绪' : world.archiveStatus === 'extracting' ? '正在编译' : '待编译'}</span>
                 <h3>{world.title || world.prompt || '未命名作品'}</h3>
                 <p>{world.summary || world.prompt}</p>
               </div>
               <div className="world-row-meta">
-                <span><Network size={14} />{world.visibilityConfirmed ? '知识已确认' : '知识待确认'}</span>
+                <span><Network size={14} />{world.visibilityConfirmed ? '知识边界已确认' : '知识边界待确认'}</span>
                 <span><FileText size={14} />{files.length} 份资料</span>
                 <span><Clock3 size={14} />Tick {tick}</span>
               </div>

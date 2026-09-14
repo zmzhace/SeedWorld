@@ -57,6 +57,18 @@ export function getModel(): string {
   return llmConfig().model
 }
 
+function providerReasoningOptions(): Record<string, unknown> {
+  const { baseURL, model } = llmConfig()
+  // OpenRouter's free router may select a reasoning model that spends the
+  // entire completion budget on hidden reasoning and returns null content.
+  // Keep reasoning available for planning, but cap it to a low effort and do
+  // not ask the gateway to echo the trace back to the application.
+  if (baseURL.includes('openrouter.ai') || model === 'openrouter/free') {
+    return { reasoning: { effort: 'none', exclude: true } }
+  }
+  return {}
+}
+
 export function cleanChatText(content: string): string {
   let cleaned = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
   cleaned = cleaned.replace(/^﻿/, '')
@@ -163,6 +175,36 @@ function isResponseFormatUnsupported(error: unknown): boolean {
   return unsupportedCodes.has(code) || unsupportedPhrases.some((phrase) => message.includes(phrase))
 }
 
+function providerError(error: unknown): Error {
+  const status = Number((error as { status?: number })?.status || (error as { statusCode?: number })?.statusCode || 0)
+  const message = error instanceof Error ? error.message : String(error)
+  if (status === 403) return new Error(`模型服务拒绝访问（403）：${message}`)
+  if (status === 429) return new Error(`模型服务触发限流（429），请稍后局部重试：${message}`)
+  if (/timeout|timed out|ETIMEDOUT/i.test(message)) return new Error(`模型服务超时：${message}`)
+  return error instanceof Error ? error : new Error(message)
+}
+
+async function repairJsonOnce(client: OpenAI, model: string, invalid: string, maxTokens?: number): Promise<Record<string, unknown>> {
+  const params = {
+      model,
+      messages: [
+        { role: 'system' as const, content: '你是 JSON 格式修复器。只能修复括号、引号、逗号、转义和截断造成的格式错误；不得改变字段含义，不得增加原文没有的事实。只输出一个 JSON 对象。' },
+        { role: 'user' as const, content: invalid },
+      ],
+      temperature: 0,
+      max_tokens: Math.min(Math.max(maxTokens || 4096, 4096), 32768),
+      ...providerReasoningOptions(),
+    } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming
+  // Deliberately omit response_format here. This repair path must also work
+  // with free gateways that rejected JSON mode in the original request.
+  let completion
+  try { completion = await client.chat.completions.create(params) }
+  catch (error) { throw providerError(error) }
+  const choice = completion.choices[0]
+  if (!choice || choice.finish_reason === 'length') throw new LLMResponseError('JSON 修复输出仍被截断', choice?.finish_reason || null)
+  return parseJsonResponse(choice.message.content || '', choice.finish_reason || null)
+}
+
 export async function chatJson(
   messages: ChatMessage[],
   options: { temperature?: number; maxTokens?: number | null; maxAttempts?: number } = {},
@@ -187,14 +229,15 @@ export async function chatJson(
           temperature: options.temperature ?? 0.3,
           ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
           ...(responseFormat ? { response_format: responseFormat } : {}),
-        })
+          ...providerReasoningOptions(),
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming)
         break
       } catch (error) {
         if (responseFormat && isResponseFormatUnsupported(error)) {
           responseFormat = undefined
           continue
         }
-        throw error
+        throw providerError(error)
       }
     }
     const choice = completion.choices[0]
@@ -211,7 +254,11 @@ export async function chatJson(
       }
       return parseJsonResponse(choice.message.content ?? '', choice.finish_reason ?? null)
     } catch (error) {
-      if (!(error instanceof LLMResponseError) || attempt >= attempts) throw error
+      if (!(error instanceof LLMResponseError)) throw error
+      if (attempt >= attempts) {
+        try { return await repairJsonOnce(client, model, choice.message.content ?? '', maxTokens) }
+        catch (repairError) { throw new LLMResponseError(`模型连续返回非法 JSON：${repairError instanceof Error ? repairError.message : String(repairError)}`, choice.finish_reason ?? null) }
+      }
       lastError = error
       // A caller-supplied cap is the common cause of a partial JSON object.
       // Double it (bounded) for the retry: some gateways pre-check credit
@@ -235,6 +282,7 @@ export async function chatText(
     messages,
     temperature: options.temperature ?? 0.7,
     ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens }),
-  })
+    ...providerReasoningOptions(),
+  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming)
   return cleanChatText(completion.choices[0]?.message?.content ?? '')
 }

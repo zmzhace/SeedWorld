@@ -17,7 +17,7 @@ import { splitText } from '@/server/source-ingestion'
  *   instead of truncating to the first 50k chars)
  * - name normalization (PascalCase entities / UPPER_SNAKE relations /
  *   snake_case fields), reserved-name guard, dedupe
- * - guaranteed fallback attributes so Zep never receives an empty field map
+ * - guaranteed fallback attributes so extraction never receives an empty field map
  * - 10/10 type caps, edge endpoints resolved AFTER capping so no edge can
  *   reference a removed type
  * - actionable safety net: the simulation agent-sync only picks up
@@ -64,6 +64,19 @@ const ORG_FALLBACK = {
     { name: 'org_type', type: 'text' as const, description: 'Kind of organization' },
   ],
   actionable: false,
+}
+
+const COLLECTIVE_TYPE_PATTERN =
+  /(organization|organisation|faction|group|collective|institution|company|corporation|movement|committee|council|army|team|guild|clan|nation|state|组织|阵营|群体|机构|企业|公司|运动|委员会|军队|小队|部落|国家|诸庭|群落)/i
+
+function canMaterializeAsPersonalAgent(input: {
+  name: string
+  displayName: string
+  description: string
+  actionable: boolean
+}) {
+  if (!input.actionable) return false
+  return !COLLECTIVE_TYPE_PATTERN.test(`${input.name} ${input.displayName} ${input.description}`)
 }
 
 const pascal = (value: string) => {
@@ -266,13 +279,15 @@ ${excerpt}`
       typeof record.description === 'string' && record.description
         ? record.description.slice(0, 100)
         : `A ${name} entity.`
-    entityTypes.push({
+    const normalizedType = {
       name,
       displayName: typeof record.displayName === 'string' && record.displayName ? record.displayName : name,
       description,
       fields: normalizeFields(record.fields),
       actionable: record.actionable === true,
-    })
+    }
+    normalizedType.actionable = canMaterializeAsPersonalAgent(normalizedType)
+    entityTypes.push(normalizedType)
     seenEntityNames.add(name)
     entityNameMap.set(original.trim(), name)
     entityNameMap.set(original.trim().toLowerCase(), name)

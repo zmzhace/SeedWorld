@@ -7,7 +7,7 @@ import { getDatabase } from './database'
 
 export const sha256 = (content: string | Uint8Array) => createHash('sha256').update(content).digest('hex')
 
-export function splitText(text: string, size = 4000, overlap = 250): string[] {
+export function splitText(text: string, size = 500, overlap = 50): string[] {
   const normalized = text.replace(/\r\n/g, '\n').trim()
   if (!normalized) return []
   const chunks: string[] = []

@@ -12,7 +12,7 @@ import { StepInteraction } from '@/components/mf/step-interaction'
 import { NovelStudioPanel } from '@/components/panel/novel-studio-panel'
 
 const STEPS = [
-  { name:'世界图谱', short:'建图', icon:Network },
+  { name:'世界档案', short:'档案', icon:Network },
   { name:'知识边界', short:'知识', icon:ShieldCheck },
   { name:'事件推演', short:'推演', icon:GitBranch },
   { name:'章节工坊', short:'成章', icon:PenTool },
@@ -37,7 +37,7 @@ export default function WorldWorkspacePage() {
   React.useEffect(()=>{if(window.matchMedia('(max-width: 900px)').matches)setGraphOpen(false)},[])
   React.useEffect(()=>{const id=searchParams.get('job');if(id)void fetch(`/api/jobs/${id}`).then((r)=>(r.ok?r.json():null)).then((value)=>value&&setJob(value))},[]) // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(()=>{
-    if(!job||['completed','failed','rolled_back'].includes(job.status)){if(job?.status==='completed'){addLog(job.message||'图谱抽取完成');void loadRecord();void loadOntology();void loadGraphStats();setGraphRefreshKey((key)=>key+1)}else if(job?.status==='failed')addLog(`抽取失败：${job.error||job.message}`);return}
+    if(!job||['completed','failed','rolled_back'].includes(job.status)){if(job?.status==='completed'){addLog(job.message||'世界档案编译完成');void loadRecord();void loadOntology();void loadGraphStats();setGraphRefreshKey((key)=>key+1)}else if(job?.status==='failed')addLog(`资料编译失败：${job.error||job.message}`);return}
     const timer=window.setInterval(async()=>{const response=await fetch(`/api/jobs/${job.id}`);if(response.ok){const next=await response.json();if(next.message!==job.message)addLog(next.message);setJob(next)}},2500);return()=>window.clearInterval(timer)
   },[job?.id,job?.status,job?.message]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -45,7 +45,7 @@ export default function WorldWorkspacePage() {
   async function confirmVisibility(){setConfirming(true);try{const response=await fetch(`/api/worlds/${worldId}/visibility/confirm`,{method:'POST'});const value=await response.json();if(!response.ok)throw new Error(value.error||'确认失败');setRecord(value);addLog('知识可见性已确认，推演已解锁')}catch(cause){addLog(`确认失败：${cause instanceof Error?cause.message:String(cause)}`)}finally{setConfirming(false)}}
   const goStep=(next:number)=>{const value=Math.min(5,Math.max(1,next));setStep(value);router.replace(`/worlds/${worldId}?step=${value}`,{scroll:false})}
 
-  const status=record?.graphSyncStatus==='failed'?'error':record?.graphSyncStatus==='ready'?'ready':record?.graphSyncStatus==='processing'?'working':'idle'
+  const status=record?.archiveStatus==='error'?'error':record?.archiveStatus==='ready'?'ready':record?.archiveStatus==='extracting'?'working':'idle'
   const tick=record?.snapshot?.tick||0; const agents=record?.snapshot?.agents?.npcs||[]
   const actionable=(ontology?.entityTypes||[]).filter((type:any)=>type.actionable).map((type:any)=>({id:type.name,name:type.displayName||type.name}))
 
@@ -53,7 +53,7 @@ export default function WorldWorkspacePage() {
     <header className="workspace-header">
       <button className="workspace-brand" onClick={()=>router.push('/')}><span aria-hidden="true"/>SEEDWORLD</button>
       <div className="workspace-title"><strong>{record?.title||'未命名作品'}</strong><span>{worldId.slice(0,8).toUpperCase()} · TICK {tick}</span></div>
-      <div className="workspace-actions"><button onClick={()=>setGraphOpen((value)=>!value)}>{graphOpen?<PanelLeftClose size={15}/>:<PanelLeftOpen size={15}/>}<span>{graphOpen?'隐藏图谱':'显示图谱'}</span></button><div className={`sync-badge ${status}`}><i/>{status==='ready'?'图谱已同步':status==='working'?'正在抽取':status==='error'?'同步失败':'待建图'}</div></div>
+      <div className="workspace-actions"><button onClick={()=>setGraphOpen((value)=>!value)}>{graphOpen?<PanelLeftClose size={15}/>:<PanelLeftOpen size={15}/>}<span>{graphOpen?'隐藏关系视图':'显示关系视图'}</span></button><div className={`sync-badge ${status}`}><i/>{status==='ready'?'档案已就绪':status==='working'?'正在编译':status==='error'?'编译失败':'待编译'}</div></div>
     </header>
 
     <nav className="stage-nav" aria-label="作品流程">
@@ -61,10 +61,10 @@ export default function WorldWorkspacePage() {
     </nav>
 
     <section className={`workspace-body${graphOpen?' with-graph':''}`}>
-      {graphOpen&&<div className="graph-column"><GraphView worldId={worldId} refreshKey={graphRefreshKey} building={record?.graphSyncStatus==='processing'} onRefresh={()=>{setGraphRefreshKey((key)=>key+1);void loadGraphStats()}} onToggleMaximize={()=>setGraphOpen(false)}/></div>}
+      {graphOpen&&<div className="graph-column"><GraphView worldId={worldId} refreshKey={graphRefreshKey} building={record?.archiveStatus==='extracting'} onRefresh={()=>{setGraphRefreshKey((key)=>key+1);void loadGraphStats()}} onToggleMaximize={()=>setGraphOpen(false)}/></div>}
       <div className="task-column">
         {step===1&&<StepGraphBuild world={record} ontology={ontology} job={job} graphStats={{...graphStats,types:ontology?.entityTypes?.length||0}} logs={logs} starting={starting} onStartExtraction={startExtraction} onNextStep={()=>goStep(2)}/>}
-        {step===2&&<StepEnvSetup world={record} agents={agents} logs={logs} confirming={confirming} onConfirmVisibility={confirmVisibility} onNextStep={()=>goStep(3)} onGoBack={()=>goStep(1)}/>}
+        {step===2&&<StepEnvSetup world={record} agents={agents} logs={logs} confirming={confirming} onConfirmVisibility={confirmVisibility} onNextStep={()=>goStep(3)} onGoBack={()=>goStep(1)} onAgentsChanged={()=>{void loadRecord()}}/>}
         {step===3&&<NovelStudioPanel worldId={worldId} tick={tick} onWorldUpdate={(next)=>{setRecord((current:any)=>current?{...current,snapshot:next}:current);setGraphRefreshKey((key)=>key+1)}}/>}
         {step===4&&<StepReport world={record} tick={tick} actionable={actionable} logs={logs} onLog={addLog}/>}
         {step===5&&<StepInteraction world={record} snapshot={record?.snapshot} logs={logs} onLog={addLog} onWorldUpdate={(next)=>{setRecord((current:any)=>current?{...current,snapshot:next}:current);setGraphRefreshKey((key)=>key+1)}}/>}

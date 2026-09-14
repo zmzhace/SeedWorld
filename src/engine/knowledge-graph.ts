@@ -1,6 +1,7 @@
 /**
  * Knowledge graph system — builds entity-relationship network for the world
- * Inspired by GraphRAG design patterns
+ * Runtime relationship index used during a tick. The durable source of truth
+ * is the SQLite world archive; this structure is rebuilt from the snapshot.
  */
 
 import type { PersonalAgentState, WorldSlice } from '@/domain/world'

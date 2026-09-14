@@ -1,6 +1,6 @@
 import type { PersonalAgentState, WorldSlice, MemoryRecord } from '@/domain/world'
 import type { AgentPatch } from '@/domain/agents'
-import type { LLMDecisionResult, SystemFeedback } from '@/server/llm/agent-decision-llm'
+import { generateAgentDecisionViaLLM, type LLMDecisionResult, type SystemFeedback } from '@/server/llm/agent-decision-llm'
 import { selectConversationPairs, runConversationScene } from './conversation-scene'
 import type { ConversationResult } from '../domain/conversation'
 
@@ -43,29 +43,12 @@ async function makeAgentDecision(
   thisTickContext?: string
 ): Promise<AgentDecision> {
   try {
-    const baseUrl = typeof window !== 'undefined'
-      ? ''
-      : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000')
-
-    // Add timeout to prevent hanging
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 seconds
-
-    const res = await fetch(`${baseUrl}/api/agents/decide`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent, world, thisTickContext }),
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeoutId)
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }))
-      throw new Error(err.error || `API ${res.status}`)
-    }
-
-    const { result: llmResult } = await res.json() as { result: LLMDecisionResult }
+    // The orchestrator already runs on the server. Calling our own HTTP API
+    // used to silently target localhost:3000 when SeedWorld ran on another
+    // port, returning an HTML page and degrading every character to fallback.
+    // Invoke the provider service directly so the active server/port is
+    // irrelevant and one Tick cannot create a self-HTTP bottleneck.
+    const llmResult: LLMDecisionResult = await generateAgentDecisionViaLLM(agent, world, thisTickContext)
     console.log(`[LLM Agent] ${agent.identity.name}: ${llmResult.action.type} - ${llmResult.behavior_description.substring(0, 60)}...`)
     return {
       agentId: agent.genetics.seed,
@@ -90,9 +73,12 @@ async function makeAgentDecision(
 function makeMinimalFallback(agent: PersonalAgentState): AgentDecision {
   const name = agent.identity.name
   const goal = agent.goals[0]
+  // Keep the degraded mode readable for Chinese novels. This path is used
+  // when the provider is unavailable (for example, an account-level 403),
+  // so an English placeholder must not masquerade as story development.
   const desc = goal
-    ? `${name} is deep in thought, pondering how to advance "${goal}".`
-    : `${name} quietly observes the surroundings, contemplating their situation.`
+    ? `${name}暂时没有贸然行动，而是重新盘算“${goal}”的下一步。`
+    : `${name}停在原地观察周围，试图判断眼前局势将把自己推向哪一边。`
   return {
     agentId: agent.genetics.seed,
     action: { type: 'contemplate', intensity: 0.3 },
@@ -100,7 +86,7 @@ function makeMinimalFallback(agent: PersonalAgentState): AgentDecision {
     new_location: agent.location,
     effects: {
       energy_delta: -0.03, stress_delta: -0.05, focus_delta: 0.05,
-      emotion: 'pensive', emotion_intensity: 0.3,
+      emotion: '谨慎', emotion_intensity: 0.3,
       is_conflict: false,
     },
   }

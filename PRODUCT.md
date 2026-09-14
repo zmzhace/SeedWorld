@@ -20,12 +20,12 @@ Each work owns a dynamic ontology. SeedWorld separates immutable source canon fr
 
 ## Operating Context
 
-Authors create a world, upload or paste reference material, wait for graph extraction, verify information visibility, run ticks, and turn a selected tick range into Markdown chapters.
+Authors create a world, upload or paste reference material, compile a world archive, verify information visibility, run ticks, and turn a selected tick range into Markdown chapters.
 
 ## Capabilities and Constraints
 
-- Next.js web application with server-only model and Zep credentials.
-- Zep Cloud is the graph extraction and remote graph service.
+- Next.js web application with server-only model credentials.
+- SQLite is the canonical world archive; no remote graph service is required.
 - SQLite is the local structured store; chapters and source copies live under the per-world data directory.
 - Source and evolution graphs are separate. Source facts are never overwritten by simulation.
 - Ontologies are work-specific and dynamic. No genre-specific entity types are platform constants.

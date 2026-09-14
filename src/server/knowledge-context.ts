@@ -7,16 +7,21 @@ export function hydrateVisibleKnowledge(worldId: string, input: WorldSlice): Wor
   const world = structuredClone(input)
   const facts = getDatabase().prepare(`SELECT f.id,f.subject_id,f.object_id,f.predicate,f.value_json,f.claim_scope,f.believer_id,
     s.name AS subject_name,o.name AS object_name
-    FROM graph_facts f LEFT JOIN graph_entities s ON s.id=f.subject_id LEFT JOIN graph_entities o ON o.id=f.object_id
+    FROM claims f LEFT JOIN entities s ON s.id=f.subject_id LEFT JOIN entities o ON o.id=f.object_id
     WHERE f.world_id=? AND f.valid_until IS NULL ORDER BY f.created_at DESC LIMIT 500`).all(worldId) as Array<Record<string, unknown>>
+  const known = getDatabase().prepare(`SELECT claim_id,holder_type,holder_id,stance,confidence FROM knowledge_states WHERE world_id=?`).all(worldId) as Array<Record<string, unknown>>
   const explicit = getDatabase().prepare('SELECT target_id,effect,subject_kind,subject_id,condition_json,priority FROM visibility_rules WHERE world_id=? ORDER BY priority DESC').all(worldId) as Array<Record<string, unknown>>
   for (const agent of world.agents.npcs) {
     const visible = facts.filter(fact => {
       const rule = explicit.find(item => item.target_id === fact.id && (item.subject_kind === 'everyone' || item.subject_id === agent.genetics.seed))
       if (rule) return rule.effect === 'allow'
+      const state = known.find(item => item.claim_id === fact.id && ((item.holder_type === 'public') || (item.holder_type === 'actor' && item.holder_id === agent.genetics.seed)))
+      if (state) return state.stance !== 'rejected'
       if (fact.claim_scope === 'public_narrative') return true
       if (fact.claim_scope === 'character_belief') return fact.believer_id === agent.genetics.seed
-      return fact.subject_id === agent.genetics.seed || fact.object_id === agent.genetics.seed
+      // Objective claims are the world's truth, not automatically a character's
+      // knowledge. Even a fact about this actor can be hidden from them.
+      return false
     }).slice(0, 30)
     const graphMemories: MemoryRecord[] = visible.map(fact => ({ id: `graph-${fact.id}`, content: `${fact.subject_name || fact.subject_id} ${fact.predicate} ${fact.object_name || parseValue(fact.value_json)}`, importance: 0.8, emotional_weight: 0, source: fact.claim_scope === 'public_narrative' ? 'social' : 'world', timestamp: new Date().toISOString(), decay_rate: 0, retrieval_strength: 1 }))
     const retained = agent.memory_long.filter(memory => !memory.id.startsWith('graph-'))

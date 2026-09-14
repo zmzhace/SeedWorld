@@ -11,7 +11,6 @@ import type {
   NarrativePatternRule
 } from '@/domain/narrative'
 import type { WorldSlice } from '@/domain/world'
-import { GraphRAGEngine } from './graph-rag-engine'
 
 export class NarrativeRecognizer {
   // 叙事模式匹配规则
@@ -59,7 +58,7 @@ export class NarrativeRecognizer {
     }
   ]
   
-  constructor(private graphRAG?: GraphRAGEngine) {}
+  constructor() {}
   
   /**
    * 从事件流中识别叙事模式

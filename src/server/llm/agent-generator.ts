@@ -1,6 +1,6 @@
 import type { PersonalAgentState } from '@/domain/world'
 import { createPersonalAgent } from '@/domain/agents'
-import { createAnthropicClient, getModel, streamText } from './anthropic'
+import { chatJson } from './openai-compat'
 
 type GenerateAgentsOptions = {
   prompt: string
@@ -59,8 +59,6 @@ export async function generateSingleAgent(options: {
   existingAgents: { seed: string; name: string; occupation?: string }[]
 }): Promise<PersonalAgentState> {
   const { description, worldContext, existingAgents } = options
-  const client = createAnthropicClient()
-  const model = getModel()
 
   const existingAgentsList = existingAgents.length > 0
     ? existingAgents.map(a => `- ${a.name} (${a.occupation || 'unknown'}, seed: ${a.seed})`).join('\n')
@@ -126,28 +124,7 @@ Return a JSON object:
   ]
 }`
 
-  const responseText = await streamText(client, {
-    model,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: 'user',
-        content: systemPrompt,
-      },
-    ],
-  })
-
-  if (!responseText) {
-    throw new Error('No text content in response')
-  }
-
-  // Extract JSON from response
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    throw new Error('Failed to parse agent specification from response')
-  }
-
-  const parsed = JSON.parse(jsonMatch[0])
+  const parsed = await chatJson([{ role: 'user', content: systemPrompt }], { temperature: 0.7, maxTokens: 4096, maxAttempts: 2 }) as { agent: AgentSpec; relations: RelationSpec[] }
   const spec: AgentSpec = parsed.agent
   const relationSpecs: RelationSpec[] = parsed.relations || []
 
@@ -278,8 +255,6 @@ async function generateAgentBatch(
   count: number,
   existingAgents: string
 ): Promise<{ specs: AgentSpec[]; relationSpecs: RelationSpec[] }> {
-  const client = createAnthropicClient()
-  const model = getModel()
 
   const existingSection = existingAgents
     ? `\n\n**Already created characters:** ${existingAgents}\nNew characters MUST have relationships with at least 1 existing character. Use their seeds in the relations array.`
@@ -338,78 +313,19 @@ Return a JSON object:
   ]
 }`
 
-  const responseText = await streamText(client, {
-    model,
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: systemPrompt,
-      },
-    ],
-  })
-
-  if (!responseText) {
-    throw new Error('No text content in response')
-  }
-
-  // Extract JSON from response - try multiple patterns
-  let jsonText = ''
-
-  // Try to find JSON between ```json and ``` markers first
-  const codeBlockMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/)
-  if (codeBlockMatch) {
-    jsonText = codeBlockMatch[1]
-  } else {
-    // Fall back to finding any JSON object
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      console.error('Failed to extract JSON from LLM response:', responseText.substring(0, 500))
-      throw new Error('Failed to parse agent specifications from response')
-    }
-    jsonText = jsonMatch[0]
-  }
-
-  let parsed
-  try {
-    // Try to parse the JSON
-    parsed = JSON.parse(jsonText)
-  } catch (parseError) {
-    // If parsing fails, save the problematic JSON and try to fix it
-    console.error('JSON parse error:', (parseError as Error).message)
-    console.error('Problematic JSON (first 2000 chars):', jsonText.substring(0, 2000))
-
-    // Save full JSON to file for debugging
-    const fs = require('fs')
-    const debugPath = '/tmp/agent-json-error.json'
-    fs.writeFileSync(debugPath, jsonText)
-    console.error(`Full problematic JSON saved to: ${debugPath}`)
-
-    // Try to fix common JSON issues
-    let fixedJson = jsonText
-      .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
-      .replace(/\n/g, ' ')             // Remove newlines
-      .replace(/\r/g, '')              // Remove carriage returns
-      .replace(/,\s*,/g, ',')          // Remove double commas
-
-    try {
-      parsed = JSON.parse(fixedJson)
-      console.log('Successfully parsed JSON after cleanup')
-    } catch (secondError) {
-      console.error('JSON still invalid after cleanup:', (secondError as Error).message)
-      throw new Error(`Failed to parse agent JSON: ${(parseError as Error).message}. Check ${debugPath} for details.`)
-    }
-  }
+  const parsed = await chatJson([{ role: 'user', content: systemPrompt }], { temperature: 0.7, maxTokens: 8192, maxAttempts: 2 })
 
   let specs: AgentSpec[]
   let relationSpecs: RelationSpec[] = []
 
   if (Array.isArray(parsed)) {
-    specs = parsed
+    specs = parsed as AgentSpec[]
   } else {
-    specs = parsed.agents || []
-    relationSpecs = parsed.relations || []
+    const record = parsed as { agents?: AgentSpec[]; relations?: RelationSpec[] }
+    specs = Array.isArray(record.agents) ? record.agents : []
+    relationSpecs = Array.isArray(record.relations) ? record.relations : []
   }
+  if (!specs.length) throw new Error('LLM returned no agent specifications')
 
   return { specs, relationSpecs }
 }
