@@ -9,6 +9,7 @@ import { createEvolutionContract, ensureRollingOutline, getLatestFoundation, sco
 import { generateAgentIntents, loadAgentIntents, loadSceneBeats, resolveSceneBeats, saveAgentIntents } from './scene-resolution-service'
 import { startChapterRun } from './chapter-service'
 import { getStoryEngine } from './story-engine-service'
+import { createOpeningContract } from './opening-chapter-service'
 import {
   buildMainlineHealth, completeWorkflowStep, createPendingTransition, createWorkflowRun,
   ensureNarrativeHorizon, getNarrativeHorizon, loadPendingTransition, markWorkflow,
@@ -101,7 +102,10 @@ async function executeTick(worldId: string, nextTick: number, workflowRunId: str
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         db.prepare("UPDATE simulation_ticks SET status='simulating',replan_count=?,block_reason=NULL WHERE world_id=? AND tick=?").run(attempt, worldId, nextTick)
-        const contract = await createEvolutionContract(worldId, base, attempt > 0)
+        const chapterCount = Number((db.prepare('SELECT COUNT(*) AS value FROM chapters WHERE world_id=?').get(worldId) as { value: number }).value)
+        const contract = chapterCount === 0
+          ? await createOpeningContract(worldId, base)
+          : await createEvolutionContract(worldId, base, attempt > 0)
         completeWorkflowStep(workflowRunId, 'create_evolution_contract', hash(contract), contract)
         const outlineRow = db.prepare('SELECT outline_json FROM chapter_outlines WHERE id=?').get(contract.chapterOutlineId || '') as { outline_json: string } | undefined
         const outline = outlineRow ? JSON.parse(outlineRow.outline_json) : undefined

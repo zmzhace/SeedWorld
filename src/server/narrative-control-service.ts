@@ -228,7 +228,13 @@ export function validateSceneChain(worldId: string, contract: EvolutionContract,
   if (contract.causalAnchorEventIds.some((id) => !eventIds.has(id))) issues.push('章节因果锚点不是已发布事件')
   const produced = new Set(beats.flatMap((item) => item.producesDeltaIds || []))
   for (const delta of contract.requiredDeltas || []) if (!produced.has(delta.id)) issues.push(`状态变化 ${delta.id} 没有对应场景节拍`)
-  if (!beats.some((beat) => beat.targetActorIds.length && beat.reaction && beat.changedOption)) issues.push('场景中没有“他人反应改变选项”')
+  const hasInteraction = beats.some((beat) => beat.targetActorIds.length && beat.reaction && beat.changedOption)
+  const hasExternalFeedback = beats.some((beat, index) => index > 0 && (beat.dependsOnBeatIds || []).length > 0 && beat.reaction && beat.changedOption)
+  // A focused opening (or an escape/investigation scene) may have one POV
+  // actor. In that case the environment, deadline or institution is the
+  // opposing force; requiring another actor would reintroduce cast padding.
+  if (contract.participants.length > 1 && !hasInteraction) issues.push('场景中没有“他人反应改变选项”')
+  if (contract.participants.length === 1 && !hasExternalFeedback) issues.push('单角色场景没有外部反馈改变选项')
   return issues
 }
 

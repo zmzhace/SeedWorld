@@ -318,7 +318,7 @@ async function runChapter(runId: string, input: ChapterRequest) {
     readerContext: { chapterNumber, previousEnding: chapterNumber === 1 ? undefined : previousEnding, entry: contract?.readerEntry },
     wiki: wiki.map((page: any) => ({ slug: page.slug, markdown: clip(page.markdown, 260) })),
   })
-  const strictRules = `必须实现演化契约的 mainlineObjective 和 requiredDeltas，不得以更热闹或更易写的无关事件替换；开场困境由 causalPrerequisite 引发；正文必须真正兑现 readerPayoff；不得越过 scopeBoundary；只服务当前故事弧，不得猜测或讲解候选终局。前三段内建立异常、冲突、选择或未解问题；${chapterNumber === 1 ? '首章先建立 POV 的当下目标与眼前阻力，读者默认不知道世界背景；' : '明确承接上一章的后果；'}只围绕一个核心事件；重大行为必须具备触发、动机、行动、后果；信息通过行动、对话、错误判断和感官释放；严格遵守 POV；只能点名演化契约的在场人物与授权的离场引用人物；不得按 Agent 顺序汇报行动，所有人物必须在同一条行动—反应—后果链中自然出现；不要均分戏份；章末钩子必须由本章因果产生；无叙事职责的生活细节必须删除。`
+  const strictRules = `必须实现演化契约的 mainlineObjective 和 requiredDeltas，不得以更热闹或更易写的无关事件替换；开场困境由 causalPrerequisite 引发；正文必须真正兑现 readerPayoff；不得越过 scopeBoundary；只服务当前故事弧，不得猜测或讲解候选终局。前三段内建立异常、冲突、选择或未解问题；${chapterNumber === 1 ? '首章采用成熟类型小说的开篇方式：第一段从具体行动、异常、逼近期限或现场矛盾切入；先让读者跟住一个POV人物的当下目标，再逐步露出最小必要背景；禁止起床照镜子、天气铺陈、梦境骗局、百科式世界观和角色名单；本章只留一个长线问题；' : '明确承接上一章的后果；'}只围绕一个核心事件；重大行为必须具备触发、动机、行动、后果；信息通过行动、对话、错误判断和感官释放；严格遵守 POV；只能点名演化契约的在场人物与授权的离场引用人物；不得按 Agent 顺序汇报行动，所有人物必须在同一条行动—反应—后果链中自然出现；不要均分戏份；章末钩子必须由本章因果产生；无叙事职责的生活细节必须删除。`
   const root = process.env.SEEDWORLD_DATA_DIR || path.resolve(process.cwd(), 'data'); const runDir = path.join(root, 'worlds', input.worldId, 'runs'); await mkdir(runDir, { recursive: true })
   let markdown = ''
   if (input.resumeDraftPath) {
