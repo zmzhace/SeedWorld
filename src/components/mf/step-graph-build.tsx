@@ -156,17 +156,17 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
           </div>
 
           <div className="card-content">
-            <p className="api-note">SOURCE GRAPH · READ ONLY</p>
-            <p className="description">分块提交后会持续显示真实阶段和等待时间。原始资料只写入 Source；后续推演只写入 Evolution。</p>
+            <p className="api-note">FACT LEDGER · READ ONLY SOURCE</p>
+            <p className="description">分块提交后会持续显示真实阶段和等待时间。原始资料只写入来源事实；创作产生的变化另行记录，不会覆盖原设定。</p>
 
             <div className="stats-grid">
               <div className="stat-card">
                 <span className="stat-value">{graphStats.nodes}</span>
-                <span className="stat-label">实体节点</span>
+                <span className="stat-label">实体</span>
               </div>
               <div className="stat-card">
                 <span className="stat-value">{graphStats.edges}</span>
-                <span className="stat-label">关系边</span>
+                <span className="stat-label">事实与关系</span>
               </div>
               <div className="stat-card">
                 <span className="stat-value">{graphStats.types}</span>
@@ -180,16 +180,16 @@ export function StepGraphBuild({ world, ontology, job, graphStats, logs, startin
           <div className="card-header">
             <div className="step-info">
               <span className="step-num">03</span>
-              <span className="step-title">构建完成</span>
+              <span className="step-title">资料可用</span>
             </div>
-            <div className="step-status">{phase >= 2 && <span className="badge accent">进行中</span>}</div>
+            <div className="step-status">{phase >= 2 && <span className="badge success">已就绪</span>}</div>
           </div>
 
           <div className="card-content">
-            <p className="api-note">NEXT · KNOWLEDGE BOUNDARY</p>
-            <p className="description">世界档案已就绪。下一步检查客观事实、公开叙事或角色信念，避免角色知道不该知道的事。</p>
+            <p className="api-note">NEXT · SECRETS AND AWARENESS</p>
+            <p className="description">设定资料已就绪。继续检查客观事实、公开说法和角色认知，避免角色知道不该知道的事。</p>
             <button className="action-btn" disabled={phase < 2} onClick={onNextStep}>
-              检查知识边界 ➝
+              检查秘密与认知 ➝
             </button>
           </div>
         </div>

@@ -12,7 +12,7 @@ Long-form fiction writers who need to turn source material, world rules, and sim
 
 ## Product Purpose
 
-SeedWorld is a general-purpose novel simulation and writing workspace. It extracts a work-specific knowledge graph, simulates only what each actor can know and do, and compiles selected simulation events into editable chapters.
+SeedWorld is a general-purpose long-form fiction workspace. It compiles work-specific facts and knowledge boundaries, lets characters and a writers room determine the next necessary story movement, and turns that approved movement into one reviewed chapter.
 
 ## Positioning
 
@@ -20,16 +20,16 @@ Each work owns a dynamic ontology. SeedWorld separates immutable source canon fr
 
 ## Operating Context
 
-Authors create a world, upload or paste reference material, compile a world archive, verify information visibility, run ticks, and turn a selected tick range into Markdown chapters.
+Authors create a work, organize source material in the setting library, verify secrets and character awareness, then generate the next chapter from the current story arc. Simulation and prose generation are one continuous operation; published Markdown is collected in the chapter library.
 
 ## Capabilities and Constraints
 
 - Next.js web application with server-only model credentials.
 - SQLite is the canonical world archive; no remote graph service is required.
 - SQLite is the local structured store; chapters and source copies live under the per-world data directory.
-- Source and evolution graphs are separate. Source facts are never overwritten by simulation.
+- Source facts are never overwritten by generated story changes.
 - Ontologies are work-specific and dynamic. No genre-specific entity types are platform constants.
-- Manual chapter compilation is the default; automatic serialization is optional.
+- Every formal generation run corresponds to one reviewed chapter; historical manual compilation is retained only as legacy data.
 
 ## Evidence on Hand
 

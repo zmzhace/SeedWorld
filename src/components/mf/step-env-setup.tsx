@@ -63,7 +63,7 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
           <div className="card-header">
             <div className="step-info">
               <span className="step-num">01</span>
-              <span className="step-title">知识层确认</span>
+              <span className="step-title">秘密与角色认知</span>
             </div>
             <div className="step-status">
               {confirmed ? <span className="badge success">已确认</span> : <span className="badge processing">待确认</span>}
@@ -77,7 +77,7 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
             {!confirmed ? (
               <button className="action-btn" disabled={confirming} onClick={onConfirmVisibility}>
                 {confirming && <span className="spinner-sm"></span>}
-                {confirming ? '正在确认……' : '确认知识边界 ➝'}
+                {confirming ? '正在确认……' : '确认认知边界 ➝'}
               </button>
             ) : (
               <p className="description">可见性已确认，推演智能体将按隔离规则获取知识。</p>
@@ -129,18 +129,18 @@ export function StepEnvSetup({ world, agents, logs, confirming, onConfirmVisibil
           <div className="card-header">
             <div className="step-info">
               <span className="step-num">03</span>
-              <span className="step-title">解锁事件推演</span>
+              <span className="step-title">返回创作台</span>
             </div>
           </div>
           <div className="card-content">
             <p className="api-note">NEXT / SIMULATION LEDGER</p>
-            <p className="description">推演不会直接改写原设定。每轮的角色意图先由规则裁决，成立的结果才会写入演化事实账本。</p>
+            <p className="description">生成下一章时，角色意图、编剧会与正文审稿会连续执行；只有正文通过后，结果才会写入正式世界。</p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="action-btn secondary" onClick={onGoBack}>
                 ← 上一步
               </button>
               <button className="action-btn" disabled={!confirmed || syncState !== 'ready' || actionable.length === 0} onClick={onNextStep}>
-                进入推演 ➝
+                前往创作台 ➝
               </button>
             </div>
           </div>

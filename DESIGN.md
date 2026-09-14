@@ -106,7 +106,7 @@ components:
 
 SeedWorld is an Operate-mode interface: it helps a writer inspect evidence, verify boundaries, advance a simulation, and compile results. Its visual world combines the warmth of an editorial desk with the precision of a technical console. Warm paper, near-black type, thin rules, compact metadata, and one vivid seed-orange accent make dense state legible without turning the workspace into a generic enterprise dashboard.
 
-The system is expressive through proportion and structure rather than decoration. Large, tightly tracked headlines introduce a world; once inside the workspace, the typography becomes compact and instrument-like. The persistent graph/workbench split makes the product's core model visible: world evidence on the left, the current operation on the right.
+The system is expressive through proportion and structure rather than decoration. Large, tightly tracked headlines introduce a world; once inside the workspace, the typography becomes compact and instrument-like. The workspace keeps authorship primary: the creation desk is the default surface, while evidence and relationship inspection live inside the setting library.
 
 **Key Characteristics:**
 
@@ -170,9 +170,9 @@ The palette is warm, low-chroma, and mostly neutral; seed orange is the sole int
 
 Public and creation surfaces use centered editorial frames: the home and library cap at 1480px, the full creation form at 1320px, and side gutters scale fluidly from 20px to 64px. The home hero is a two-column composition with a generous gap: narrative on the left, creation console on the right. The pipeline and library use gapless, rule-divided grids rather than floating cards.
 
-The home creation surface is a world-seed manuscript rather than a system console: a folio number, orange bookmark, ruled writing field, and source-material shelf make the action feel native to authorship while preserving operational clarity. The world workspace fills the viewport (`100dvh`) and prevents page-level scrolling. A fixed 62px header, 54px five-stage rail, flexible workspace body, and 52px footer form the vertical frame. When the graph is open, the body splits into `minmax(360px, 0.92fr)` for the graph and `minmax(480px, 1.08fr)` for the workbench, separated by a single vertical rule. Each side owns its scrolling and overflow.
+The home creation surface is a world-seed manuscript rather than a system console: a folio number, orange bookmark, ruled writing field, and source-material shelf make the action feel native to authorship while preserving operational clarity. The world workspace fills the viewport (`100dvh`) and prevents page-level scrolling. A fixed 62px header, 54px three-workspace rail, and flexible workspace body form the vertical frame. The durable destinations are Creation Desk, Setting Library, and Chapter Library; they are not presented as a one-time wizard. Inside the setting library, opening relationships splits the body into `minmax(360px, 0.92fr)` for evidence and `minmax(480px, 1.08fr)` for setting tools, separated by a single vertical rule.
 
-At 980px, the public hero becomes one column and the five-step pipeline becomes two columns. At 900px, the workspace becomes a single pane: opening the graph shows the graph and hides the task column; closing it returns to the workbench. Stage labels shorten and the footer is removed. Below 620px, library and statistics grids collapse to one column, workbench gutters tighten from 18px to 10px, nonessential system logs disappear, and safe-area bottom padding is respected. Creation switches from main-plus-340px-sidebar to a single flow below 820px.
+At 980px, the public hero becomes one column and the introductory pipeline becomes two columns. At 900px, the workspace becomes a single pane: opening relationships inside the setting library shows that view and hides the setting tools; closing it returns to the library. Workspace labels shorten. Below 620px, library and statistics grids collapse to one column, workbench gutters tighten from 18px to 10px, nonessential system logs disappear, and safe-area bottom padding is respected. Creation switches from main-plus-340px-sidebar to a single flow below 820px.
 
 Spacing is intentionally compact inside operational surfaces. Repeating increments are 5px, 8px, 12px, 18px, and 24px; large public-page gaps and paddings use fluid clamps. Structural adjacency matters more than air: related cards share borders, rows meet edge-to-edge, and section bars sit directly on their content.
 
@@ -236,11 +236,11 @@ The brand mark is a small orange leaf/seed silhouette with three rounded corners
 
 - **Public navigation:** A 60–68px ruled header with the seed mark and wide-tracked wordmark. Actions are compact, transparent controls that gain a white surface and border on hover.
 - **Workspace header:** A 56–62px three-part grid for brand, world identity, and graph/sync controls. Long world titles truncate; the monospace ID and tick remain secondary.
-- **Stage rail:** Five equal-width cells separated by rules. The active stage turns white and gains a 2px orange underline; completed stages use green. Mobile replaces full names with short labels and may hide icons below 520px.
+- **Workspace rail:** Three equal-width destinations separated by rules: Creation, Settings, and Chapters. The active destination turns white and gains a 2px orange underline. It never uses completion checkmarks because long-form writing is cyclical, not a finished five-step wizard. Mobile uses the short labels.
 
-### Graph / Workbench Split
+### Setting Evidence / Workbench Split
 
-The graph is a persistent evidence surface, not a decorative visualization. Its toolbar contains the node/edge count, Source/Evolution layer switch, refresh, and pane toggle. The canvas stays warm and low-contrast so colored nodes and relationships lead; a compact legend sits at the bottom and a floating inspector opens over the canvas.
+The relationship view is an optional evidence surface inside the setting library, not a workflow stage or decorative visualization. Its toolbar contains entity and relation counts, source/generated filters, refresh, and pane toggle. The canvas stays warm and low-contrast so colored entities and relationships lead; a compact legend sits at the bottom and a floating inspector opens over the canvas.
 
 The workbench is the operational half of the pair. It uses stacked, ruled step cards, compact state badges, numeric metric grids, ledger rows, and a dark fixed-height system log. Content scrolls inside the pane while the workspace frame remains fixed. Selection and active phase are consistently shown with the orange leading rule.
 

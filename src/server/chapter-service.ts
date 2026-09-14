@@ -68,6 +68,27 @@ export function getChapter(chapterId: string) {
   return { id: String(row.id), chapterNumber: Number(row.chapter_number), version: Number(row.version), title: String(row.title), markdown, validation: JSON.parse(String(row.validation_json || '{}')) }
 }
 
+export function listChapters(worldId: string) {
+  const rows = getDatabase().prepare('SELECT * FROM chapters WHERE world_id=? ORDER BY chapter_number DESC, version DESC').all(worldId) as Record<string, unknown>[]
+  return rows.map((row) => {
+    let markdown = ''
+    try { markdown = readFileSync(String(row.markdown_path), 'utf8') } catch { markdown = '' }
+    return {
+      id: String(row.id),
+      chapterNumber: Number(row.chapter_number),
+      version: Number(row.version),
+      title: String(row.title),
+      povEntityId: row.pov_entity_id ? String(row.pov_entity_id) : undefined,
+      tickFrom: Number(row.tick_from),
+      tickTo: Number(row.tick_to),
+      generationKind: String(row.generation_kind || 'legacy_generation'),
+      createdAt: String(row.created_at),
+      markdown,
+      validation: JSON.parse(String(row.validation_json || '{}')),
+    }
+  })
+}
+
 export function getChapterReviews(worldId: string, chapterId?: string): ChapterReview[] {
   const rows = chapterId ? getDatabase().prepare('SELECT review_json FROM chapter_reviews WHERE world_id=? AND chapter_id=? ORDER BY revision').all(worldId, chapterId) : getDatabase().prepare('SELECT review_json FROM chapter_reviews WHERE world_id=? ORDER BY created_at DESC LIMIT 20').all(worldId)
   return (rows as Array<{ review_json: string }>).map((row) => JSON.parse(row.review_json) as ChapterReview)

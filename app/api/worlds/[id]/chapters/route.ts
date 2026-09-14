@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getChapter, getLatestChapterRun, startChapterRun } from '@/server/chapter-service'
+import { getChapter, getLatestChapterRun, listChapters, startChapterRun } from '@/server/chapter-service'
 export const runtime = 'nodejs'
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -10,9 +10,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
 }
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   const run = getLatestChapterRun(params.id)
-  if (!run) return NextResponse.json({ run: null })
+  const chapters = listChapters(params.id)
+  if (!run) return NextResponse.json({ run: null, chapters })
   if (run.status === 'completed' && run.chapterId) {
-    return NextResponse.json({ run, chapter: getChapter(run.chapterId) })
+    return NextResponse.json({ run, chapter: getChapter(run.chapterId), chapters })
   }
-  return NextResponse.json({ run })
+  return NextResponse.json({ run, chapters })
 }
