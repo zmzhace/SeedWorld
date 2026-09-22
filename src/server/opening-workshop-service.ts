@@ -81,7 +81,7 @@ async function runOpeningDraft(runId: string, worldId: string) {
 首章只需要回答七件事：谁在现场、他现在必须做什么、什么正在阻止他、他要在什么代价之间选择、选择造成什么结果、读者得到什么局部回报、下一章为什么必须继续。
 开头必须从正在发生的动作或异常切入。只允许一个连续地点、一个POV、一个即时目标、一个主要阻碍、一次困难选择和一个不可逆结果。默认最多两名具名人物，不要求解释人物背景；最多一个陌生概念，不要求解释完整原理。
 返回严格JSON，字段只能是：title,povId,povName,immediateGoal,obstacle,difficultChoice,consequence,localPayoff,hook,allowedNamedCharacters[],allowedConcepts[]。不要返回 beats、设定说明、历史、阵营或“为什么这样设计”。
-作品承诺与首章压力：${JSON.stringify({ corePromise: foundation.corePromise, centralConflict: foundation.centralConflict, thematicQuestion: foundation.thematicQuestion, protagonistPressure: foundation.protagonistPressure, immutableRules: foundation.immutableRules.slice(0, 8) })}
+作品承诺与首章压力：${JSON.stringify({ corePromise: foundation.corePromise, centralConflict: foundation.centralConflict, thematicQuestion: foundation.thematicQuestion, protagonistPressure: foundation.protagonistPressure, immutableRules: foundation.immutableRules.slice(0, 8), openingBrief: persisted.summary.slice(0, 3200) })}
 可选POV：${JSON.stringify(sourceActors)}
 ` }], { maxTokens: 2400, maxAttempts: 2 })
     const planComplete = (value: Record<string, unknown>) => Boolean(
