@@ -1,6 +1,7 @@
 import 'server-only'
 
 import OpenAI from 'openai'
+import { ProxyAgent, fetch as undiciFetch } from 'undici'
 
 /**
  * OpenAI-compatible LLM client.
@@ -42,12 +43,30 @@ export function llmConfig() {
 
 let cachedClient: OpenAI | null = null
 let cachedFingerprint = ''
+let cachedProxyAgent: ProxyAgent | null = null
+let cachedProxyUrl = ''
 
 export function getOpenAIClient(): OpenAI {
   const { apiKey, baseURL } = llmConfig()
-  const fingerprint = `${apiKey}:${baseURL}`
+  const configuredTimeout = Number(process.env.WORLD_SLICE_LLM_TIMEOUT_MS || 180_000)
+  const timeout = Number.isFinite(configuredTimeout)
+    ? Math.max(30_000, Math.min(configuredTimeout, 300_000))
+    : 180_000
+  const proxyUrl = (process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim()
+  const fingerprint = `${apiKey}:${baseURL}:${timeout}:${proxyUrl}`
   if (!cachedClient || cachedFingerprint !== fingerprint) {
-    cachedClient = new OpenAI({ apiKey, baseURL, timeout: 300_000, maxRetries: 2 })
+    // chatJson owns the bounded semantic retry policy. Letting the SDK retry
+    // each request again can turn one failed workflow step into a 15-minute
+    // black box, which makes long-form generation effectively unrecoverable.
+    if (proxyUrl && (!cachedProxyAgent || cachedProxyUrl !== proxyUrl)) {
+      cachedProxyAgent?.close().catch(() => undefined)
+      cachedProxyAgent = new ProxyAgent(proxyUrl)
+      cachedProxyUrl = proxyUrl
+    }
+    const proxyFetch = proxyUrl && cachedProxyAgent
+      ? ((input: Parameters<typeof undiciFetch>[0], init?: Parameters<typeof undiciFetch>[1]) => undiciFetch(input, { ...init, dispatcher: cachedProxyAgent! }))
+      : undefined
+    cachedClient = new OpenAI({ apiKey, baseURL, timeout, maxRetries: 0, ...(proxyFetch ? { fetch: proxyFetch as unknown as typeof globalThis.fetch } : {}) })
     cachedFingerprint = fingerprint
   }
   return cachedClient
@@ -63,7 +82,10 @@ function providerReasoningOptions(): Record<string, unknown> {
   // entire completion budget on hidden reasoning and returns null content.
   // Keep reasoning available for planning, but cap it to a low effort and do
   // not ask the gateway to echo the trace back to the application.
-  if (baseURL.includes('openrouter.ai') || model === 'openrouter/free') {
+  // Do not force reasoning off on the free router. It can select endpoints
+  // where reasoning is mandatory; omitting this option lets the selected
+  // provider apply its own compatible default.
+  if (baseURL.includes('openrouter.ai') && model !== 'openrouter/free') {
     return { reasoning: { effort: 'none', exclude: true } }
   }
   return {}
@@ -179,9 +201,27 @@ function providerError(error: unknown): Error {
   const status = Number((error as { status?: number })?.status || (error as { statusCode?: number })?.statusCode || 0)
   const message = error instanceof Error ? error.message : String(error)
   if (status === 403) return new Error(`模型服务拒绝访问（403）：${message}`)
-  if (status === 429) return new Error(`模型服务触发限流（429），请稍后局部重试：${message}`)
+  if (status === 429) {
+    const body = (error as { body?: unknown })?.body ?? (error as { error?: unknown })?.error
+    const metadata = (body as { metadata?: { headers?: Record<string, unknown> } })?.metadata
+    const reset = Number(metadata?.headers?.['X-RateLimit-Reset'] || metadata?.headers?.['x-ratelimit-reset'] || 0)
+    const resetHint = Number.isFinite(reset) && reset > Date.now() ? `；免费额度预计于 ${new Date(reset).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })} 重置` : ''
+    return new Error(`模型服务触发限流（429），请稍后局部重试${resetHint}：${message}`)
+  }
   if (/timeout|timed out|ETIMEDOUT/i.test(message)) return new Error(`模型服务超时：${message}`)
   return error instanceof Error ? error : new Error(message)
+}
+
+function isTransientProviderError(error: unknown): boolean {
+  const status = Number((error as { status?: number })?.status || (error as { statusCode?: number })?.statusCode || 0)
+  const message = error instanceof Error ? error.message : String(error)
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500 ||
+    /connection|terminated|timeout|timed out|econnreset|socket|temporarily overloaded|service unavailable|upstream error/i.test(message)
+}
+
+async function waitBeforeRetry(attempt: number): Promise<void> {
+  const delay = Math.min(1500 * 2 ** Math.max(0, attempt - 1), 6000)
+  await new Promise((resolve) => setTimeout(resolve, delay))
 }
 
 async function repairJsonOnce(client: OpenAI, model: string, invalid: string, maxTokens?: number): Promise<Record<string, unknown>> {
@@ -200,7 +240,7 @@ async function repairJsonOnce(client: OpenAI, model: string, invalid: string, ma
   let completion
   try { completion = await client.chat.completions.create(params) }
   catch (error) { throw providerError(error) }
-  const choice = completion.choices[0]
+  const choice = completion.choices?.[0]
   if (!choice || choice.finish_reason === 'length') throw new LLMResponseError('JSON 修复输出仍被截断', choice?.finish_reason || null)
   return parseJsonResponse(choice.message.content || '', choice.finish_reason || null)
 }
@@ -216,31 +256,46 @@ export async function chatJson(
   let maxTokens = options.maxTokens === null ? undefined : (options.maxTokens ?? undefined)
   let lastError: LLMResponseError | null = null
 
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    let completion: Awaited<ReturnType<OpenAI['chat']['completions']['create']>>
+  attemptLoop: for (let attempt = 1; attempt <= attempts; attempt++) {
+    let completion: { choices: Array<{ finish_reason: string | null; message: { content: string | null } }> }
     // JSON-mode capability negotiation is separate from content regeneration:
     // an explicit response_format rejection adds one request but never
     // consumes a content attempt.
     for (;;) {
       try {
-        completion = await client.chat.completions.create({
+        const stream = await client.chat.completions.create({
           model,
           messages,
           temperature: options.temperature ?? 0.3,
           ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
           ...(responseFormat ? { response_format: responseFormat } : {}),
+          stream: true,
           ...providerReasoningOptions(),
-        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming)
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming)
+        let content = ''
+        let finishReason: string | null = null
+        for await (const chunk of stream) {
+          const choice = chunk.choices?.[0]
+          if (!choice) continue
+          content += choice.delta?.content ?? ''
+          if (choice.finish_reason) finishReason = choice.finish_reason
+        }
+        completion = { choices: [{ finish_reason: finishReason, message: { content } }] }
         break
       } catch (error) {
         if (responseFormat && isResponseFormatUnsupported(error)) {
           responseFormat = undefined
           continue
         }
-        throw providerError(error)
+        const normalized = providerError(error)
+        if (attempt < attempts && isTransientProviderError(error)) {
+          await waitBeforeRetry(attempt)
+          continue attemptLoop
+        }
+        throw normalized
       }
     }
-    const choice = completion.choices[0]
+    const choice = completion.choices?.[0]
     if (!choice) throw new LLMResponseError('LLM returned no choices')
     try {
       if (choice.finish_reason === 'length') {
@@ -273,16 +328,43 @@ export async function chatJson(
 
 export async function chatText(
   messages: ChatMessage[],
-  options: { temperature?: number; maxTokens?: number } = {},
+  options: { temperature?: number; maxTokens?: number; maxAttempts?: number } = {},
 ): Promise<string> {
   const client = getOpenAIClient()
   const model = getModel()
-  const completion = await client.chat.completions.create({
-    model,
-    messages,
-    temperature: options.temperature ?? 0.7,
-    ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens }),
-    ...providerReasoningOptions(),
-  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming)
-  return cleanChatText(completion.choices[0]?.message?.content ?? '')
+  const attempts = Math.max(1, options.maxAttempts ?? 2)
+  let lastError: Error | undefined
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      // Long prose responses from free OpenRouter routes are more reliable as
+      // a stream: each chunk keeps the connection active instead of leaving
+      // one silent HTTP request open until the entire chapter is finished.
+      const stream = await client.chat.completions.create({
+        model,
+        messages,
+        temperature: options.temperature ?? 0.7,
+        ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens }),
+        stream: true,
+        ...providerReasoningOptions(),
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming)
+      let raw = ''
+      let finishReason: string | null = null
+      for await (const chunk of stream) {
+        const choice = chunk.choices?.[0]
+        if (!choice) continue
+        raw += choice.delta?.content ?? ''
+        if (choice.finish_reason) finishReason = choice.finish_reason
+      }
+      if (finishReason === 'length') throw new LLMResponseError('LLM prose output was truncated at the token limit', 'length')
+      const content = cleanChatText(raw)
+      if (!content) throw new LLMResponseError('LLM returned empty prose content', finishReason)
+      return content
+    } catch (error) {
+      lastError = providerError(error)
+      if (attempt >= attempts) throw lastError
+      if (!isTransientProviderError(error) && !(error instanceof LLMResponseError)) throw lastError
+      await waitBeforeRetry(attempt)
+    }
+  }
+  throw lastError ?? new LLMResponseError('LLM did not produce prose')
 }
