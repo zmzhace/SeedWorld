@@ -178,7 +178,15 @@ export function getLatestOpeningDraftRun(worldId: string): OpeningDraftRun | nul
 export function startOpeningDraftRun(worldId: string): OpeningDraftRun {
   const db = getDatabase()
   const running = db.prepare("SELECT * FROM opening_draft_runs WHERE world_id=? AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1").get(worldId) as Record<string, unknown> | undefined
-  if (running) return mapRun(running)
+  if (running) {
+    const updatedAt = Date.parse(String(running.updated_at || ''))
+    const stale = !Number.isFinite(updatedAt) || Date.now() - updatedAt > 15 * 60 * 1000
+    if (!stale) return mapRun(running)
+    // A process restart can leave an async run marked running forever. Do not
+    // let that abandoned lease block a new opening attempt.
+    db.prepare("UPDATE opening_draft_runs SET status='failed',stage='blocked',progress=100,message=?,error=?,updated_at=? WHERE id=?")
+      .run('首章工坊上一轮任务已过期，允许重新开始', '任务租约超过15分钟未更新', new Date().toISOString(), String(running.id))
+  }
   const id = randomUUID(); const now = new Date().toISOString()
   db.prepare('INSERT INTO opening_draft_runs (id,world_id,status,stage,progress,message,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
     .run(id, worldId, 'queued', 'queued', 0, '等待首章工坊开始', now, now)
