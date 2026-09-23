@@ -8,6 +8,7 @@ import { getDatabase } from './database'
 import { chatJson, chatText } from './llm/openai-compat'
 import { getWorld } from './novel-repository'
 import { getLatestFoundation } from './narrative-planning-service'
+import { getPlatformBranch, platformBranchRules } from './platform-branch'
 
 export type OpeningDraftRun = {
   id: string
@@ -78,13 +79,16 @@ async function runOpeningDraft(runId: string, worldId: string) {
     if (!foundation) throw new Error('请先完成资料编译，让首章有可依据的作品根基')
     const workText = `${persisted.summary || ''} ${foundation.corePromise || ''} ${foundation.centralConflict || ''}`
     const isSystemStory = /系统|金手指|外挂|回收能力|签到|面板/.test(workText)
+    const settings = persisted.writingSettings
+    const tomatoBranch = getPlatformBranch(settings) === 'tomato_shuangwen'
     const actors = (persisted.snapshot as any)?.agents?.npcs?.filter((item: any) => item.life_status !== 'dead') || []
     if (!actors.length) throw new Error('没有可作为首章视角的行动人物')
     const sourceActors = actors.slice(0, 6).map((item: any) => ({ id: item.genetics?.seed, name: item.identity?.name, goal: item.goals?.[0], location: item.location }))
     report(runId, { status: 'running', stage: 'contract', progress: 15, message: '正在锁定单一视角和开篇压力' })
     let plan = await chatJson([{ role: 'system', content: '你服务于中文网络小说平台。所有自然语言字段必须使用简体中文，不得输出英文。' }, { role: 'user', content: `你是长篇类型小说的首章场景编辑。只设计一个能直接写成小说的现场，不写世界观，不写人物小传，不规划后续章节。
-首章只需要回答七件事：谁在现场、他现在必须做什么、什么正在阻止他、他要在什么代价之间选择、选择造成什么结果、读者得到什么局部回报、下一章为什么必须继续。结果必须是当场发生且改变下一步行动的具体后果，不能用“仍不知道”“继续观察”“被带走”“事情还没解决”冒充结果。系统题材必须采用“现实压迫→主角先凭经验或胆量主动反击→反击仍付出代价→系统后置出现→第一次使用立刻让压迫者或障碍出现可见损失→主角获得局部胜利”的递进，不能把系统当作第一步救命按钮。
-开头必须从正在发生的动作或异常切入。只允许一个连续地点、一个POV、一个即时目标、一个主要阻碍、一次困难选择和一个不可逆结果。${isSystemStory ? '这是系统题材，场景卡必须把系统留到中后段：前半段先写主角用现实能力完成一次主动反击但仍被逼入更糟的位置；系统出现后只提供一次可验证的小幅翻盘，并让压迫者或障碍立刻承担可见损失。allowedConcepts必须包含一个简短的系统/能力名，但不能解释完整面板。' : ''}默认最多两名现场人物，不要求解释人物背景；最多两个新信息单元，其中至多一个是抽象规则/概念，另一个必须是当前动作中真正被使用的具体道具。
+${platformBranchRules(getPlatformBranch(settings))}
+首章只需要回答七件事：谁在现场、他现在必须做什么、什么正在阻止他、他要在什么代价之间选择、选择造成什么结果、读者得到什么局部回报、下一章为什么必须继续。结果必须是当场发生且改变下一步行动的具体后果，不能用“仍不知道”“继续观察”“被带走”“事情还没解决”冒充结果。系统题材必须采用“现实压迫→主角先凭经验或胆量主动反击→系统后置出现→第一次使用立刻让压迫者或障碍出现可见损失→主角获得局部胜利”的递进，不能把系统当作第一步救命按钮；系统默认无身体、记忆或情绪副作用，限制只能来自物品、时间、范围、次数或暴露风险。
+开头必须从正在发生的动作或异常切入。只允许一个连续地点、一个POV、一个即时目标、一个主要阻碍、一次困难选择和一个不可逆结果。${isSystemStory ? '这是系统题材，场景卡必须把系统留到中后段：前半段先写主角用现实能力完成一次主动反击但仍被逼入更糟的位置；系统出现后只提供一次可验证的小幅翻盘，并让压迫者或障碍立刻承担可见损失。系统不得制造身体或记忆损伤，allowedConcepts必须包含一个简短的系统/能力名，但不能解释完整面板。' : ''}${tomatoBranch ? '这是番茄爽文分支：前五百字必须出现明确现实压迫或利益损失；首章必须完成一次可见打脸、翻盘或收益兑现，不能只留下谜团；章末钩子必须建立在已兑现收益之后。' : ''}默认最多两名现场人物，不要求解释人物背景；最多两个新信息单元，其中至多一个是抽象规则/概念，另一个必须是当前动作中真正被使用的具体道具。
 返回严格JSON，字段只能是：title,povId,povName,immediateGoal,obstacle,difficultChoice,consequence,localPayoff,hook,allowedNamedCharacters[],allowedConcepts[]。allowedNamedCharacters 只列现场人物，最多两人；如果主线确实需要一个场外锚点，只能在 obstacle、consequence 或 hook 中出现一个姓名，不得再列第二个场外姓名。不要返回 beats、设定说明、历史、阵营或“为什么这样设计”。
 作品承诺与首章压力：${JSON.stringify({ corePromise: foundation.corePromise, centralConflict: foundation.centralConflict, thematicQuestion: foundation.thematicQuestion, protagonistPressure: foundation.protagonistPressure, immutableRules: foundation.immutableRules.slice(0, 8), openingBrief: (persisted.summary || '').slice(0, 3200) })}
 可选POV：${JSON.stringify(sourceActors)}
@@ -111,7 +115,7 @@ async function runOpeningDraft(runId: string, worldId: string) {
 
     report(runId, { status: 'running', stage: 'draft', progress: 42, message: '正在按首章信息预算写作' })
     const contract = { title: clip(plan.title, 80), povId, povName, immediateGoal: clip(plan.immediateGoal, 260), obstacle: clip(plan.obstacle, 260), difficultChoice: clip(plan.difficultChoice, 260), consequence: clip(plan.consequence, 260), localPayoff: clip(plan.localPayoff, 260), hook: clip(plan.hook, 260), allowedNamedCharacters: allowedNames, allowedConcepts }
-    const openingStyleInstruction = '如果作品属于系统/金手指类型，系统不能在第一段或主角第一次遇险时直接弹窗。先让主角凭现实中的判断、经验或不服输的动作完成一次主动反击，最好让压迫者先吃到一个小亏；再让现实阻力把他逼到更糟的位置；系统只能在正文中后段作为改变局面的异常出现，并且第一次使用必须立刻让压迫者、规则或现场障碍产生可见损失。禁止用系统绑定成功代替冲突，禁止一上来展示面板、等级、商城、任务列表或完整规则。前30%正文不得出现系统、面板、绑定、任务、属性、奖励等系统词；若场景卡没有系统类概念，则不要自行添加金手指。'
+    const openingStyleInstruction = `如果作品属于系统/金手指类型，系统不能在第一段或主角第一次遇险时直接弹窗。先让主角凭现实中的判断、经验或不服输的动作完成一次主动反击，最好让压迫者先吃到一个小亏；再让现实阻力把他逼到更糟的位置；系统只能在正文中后段作为改变局面的异常出现，并且第一次使用必须立刻让压迫者、规则或现场障碍产生可见损失。${tomatoBranch ? '本分支系统无身体、记忆或情绪副作用，收益的限制来自物品、时间、次数、范围或暴露风险。' : ''}禁止用系统绑定成功代替冲突，禁止一上来展示面板、等级、商城、任务列表或完整规则。前30%正文不得出现系统、面板、绑定、任务、属性、奖励等系统词；若场景卡没有系统类概念，则不要自行添加金手指。`
     let markdown = await chatText([{ role: 'system', content: '你是成熟的中文网络小说作者。必须使用简体中文写作；如果上一条指令与此冲突，仍然只输出简体中文正文。' }, { role: 'user', content: `根据首章场景卡写完整正文，只输出Markdown，不解释写法。
 从现场正在发生的动作开始，不要从醒来、照镜子、天气、梦境、穿越说明或历史介绍开始。全文只写一个连续场景：POV为${contract.povName}，他有一个现在必须完成的目标，遇到一个正在发生的阻碍，在两个都有代价的选择中做决定，并承担结果。人物通过动作和对话自然出现，不轮流介绍，不平均分配戏份。正文必须使用简体中文；候选人物的英文内部名只用于识别，正文请使用场景卡中的中文姓名，不要把英文名直接写进正文。
 只允许出现这些现场具名人物：${JSON.stringify(allowedNames)}；除此之外最多允许三个与当前目标直接相关的场外关键姓名，不能形成角色名单。身份称呼（如“太太”“老太太”“门外的大夫”）不算新增人物。这里的“出现”包括正文、对话、回忆、旁白和顺带提及；不得把场外人物写成一串名单。只允许出现这些新信息单元：${JSON.stringify(allowedConcepts)}；其中最多一个抽象概念，另一个必须是当前动作中真正使用的具体道具。清单为空就不要创造新术语。不要解释世界全貌、阵营、能力体系或人物前史。章末必须落在本章结果造成的下一压力上，不凭空增加危机；主角必须通过一次具体动作、承诺、隐瞒、破坏或离开，获得局部回报并让下一步选择发生变化。

@@ -104,6 +104,8 @@ export type WorldRule = {
 export type WritingSettings = {
   genre: string
   audience: string
+  /** Optional platform-specific pacing branch; generic remains the default. */
+  platformBranch?: 'generic' | 'tomato_shuangwen'
   language: string
   narration: 'first_person' | 'third_limited' | 'third_omniscient'
   defaultPov?: string
@@ -119,6 +121,7 @@ export type WritingSettings = {
 export const DEFAULT_WRITING_SETTINGS: WritingSettings = {
   genre: '',
   audience: '',
+  platformBranch: 'generic',
   language: 'zh',
   narration: 'third_limited',
   targetWords: 2500,

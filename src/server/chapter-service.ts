@@ -16,6 +16,7 @@ import { chatJson } from './llm/openai-compat'
 import { DRAFT_RULES, REVISE_RULES } from './llm/rules'
 import { getStoryEngine } from './story-engine-service'
 import { applyReaderAndStoryProjection } from './reader-story-service'
+import { getPlatformBranch, platformBranchRules } from './platform-branch'
 
 export type ChapterRequest = { worldId: string; tickFrom: number; tickTo: number; tick?: number; contractId?: string; povEntityId?: string; goal?: string; requiredEvents?: string[]; eventIds?: string[]; resumeDraftPath?: string }
 
@@ -235,6 +236,7 @@ function deterministicNarrativeIssues(input: {
 }
 
 async function reviewChapter(worldId: string, runId: string, revision: number, material: string, contract: EvolutionContract | undefined, markdown: string, context: { actorNames: Array<{ id: string; name: string }>; chapterNumber: number }): Promise<ChapterReview> {
+  if (context.chapterNumber > 1) material += '\n连续性审稿硬约束：上一章已经明确的身体状态、数量、能力代价和物品状态必须原样继承；本章新增的伤势或代价必须有现场触发、角色感知和因果解释，不能由系统突然宣布。若前章写明某只手的若干手指失去感觉，本章不得无契约地扩展到另一只手或改变数量。'
   const rawText = await ask(`你是严格且以证据为准的长篇小说主编。阅读契约、可见事实和完整正文，逐项评分。零容忍：设定冲突、知识越权、无动机重大行动、死亡角色行动、核心事件缺失，以及用另一件事替换 mainlineObjective。必须核对：正文是否由 causalPrerequisite 引发；是否完成 mainlineObjective 和 requiredStateChanges；是否给出 readerPayoff；是否越过 scopeBoundary；本章的变化是否为 globalRelevance 做了真实准备而不是只在口头上相关。任一主线对齐失败必须记为 critical。同时检查前三段钩子、承接、单一核心事件、触发-动机-行动-后果、对话职责、章末钩子因果来源，以及删除本章是否会损害因果/人物选择/信息理解/情绪积累/伏笔兑现。特别检查：是否因为 Agent 存在就逐一点名；是否按角色轮流汇报各自动作；每名出现的人物是否实际改变了同一核心冲突。这三项任一失败必须记为 error。返回 JSON：dimensions[{key,score,evidence}]（key 必须为 ${DIMENSIONS.join(',')}），issues[{severity:critical|error|warning,quote,contractField,message,instruction}]，deletionTestPassed:boolean，deletionLoss:string。每条问题必须逐字引用正文。每维不得低于70，平均不得低于80。\n契约：${JSON.stringify(contract || {})}\n素材：${material}\n正文：${markdown}`, 6144)
   const review = normalizeReview(extractJson(rawText), { worldId, runId, revision })
   const deterministic = deterministicNarrativeIssues({ markdown, contract, ...context })
@@ -339,7 +341,12 @@ async function runChapter(runId: string, input: ChapterRequest) {
     readerContext: { chapterNumber, previousEnding: chapterNumber === 1 ? undefined : previousEnding, entry: contract?.readerEntry },
     wiki: wiki.map((page: any) => ({ slug: page.slug, markdown: clip(page.markdown, 260) })),
   })
-  const strictRules = `必须实现演化契约的 mainlineObjective 和 requiredDeltas，不得以更热闹或更易写的无关事件替换；开场困境由 causalPrerequisite 引发；正文必须真正兑现 readerPayoff；不得越过 scopeBoundary；只服务当前故事弧，不得猜测或讲解候选终局。前三段内建立异常、冲突、选择或未解问题；${chapterNumber === 1 ? '首章采用成熟类型小说的开篇方式：第一段从具体行动、异常、逼近期限或现场矛盾切入；先让读者跟住一个POV人物的当下目标，再逐步露出最小必要背景；禁止起床照镜子、天气铺陈、梦境骗局、百科式世界观和角色名单；本章只留一个长线问题；' : '明确承接上一章的后果；'}只围绕一个核心事件；重大行为必须具备触发、动机、行动、后果；信息通过行动、对话、错误判断和感官释放；严格遵守 POV；只能点名演化契约的在场人物与授权的离场引用人物；不得按 Agent 顺序汇报行动，所有人物必须在同一条行动—反应—后果链中自然出现；不要均分戏份；章末钩子必须由本章因果产生；无叙事职责的生活细节必须删除。`
+  const continuityRules = chapterNumber > 1
+    ? '连续性硬约束：上一章已经明确的身体状态、数量、能力代价和物品状态必须原样继承；本章不得凭空新增永久伤势、失去另一只手的感觉、改变数量或改写代价。若本章确实要产生新的伤势或代价，必须在场景中先出现明确触发、角色感知和因果解释，并且它必须写进本章契约或用户明确目标；不能用系统提示突然宣布。任何“为什么会这样”无法由正文行动解释的变化都必须删除。'
+    : ''
+  const tomatoBranch = getPlatformBranch(world.writingSettings) === 'tomato_shuangwen'
+  const tomatoRules = tomatoBranch ? platformBranchRules(getPlatformBranch(world.writingSettings)) : ''
+  const strictRules = `必须实现演化契约的 mainlineObjective 和 requiredDeltas，不得以更热闹或更易写的无关事件替换；开场困境由 causalPrerequisite 引发；正文必须真正兑现 readerPayoff；不得越过 scopeBoundary；只服务当前故事弧，不得猜测或讲解候选终局。前三段内建立异常、冲突、选择或未解问题；${chapterNumber === 1 ? '首章采用成熟类型小说的开篇方式：第一段从具体行动、异常、逼近期限或现场矛盾切入；先让读者跟住一个POV人物的当下目标，再逐步露出最小必要背景；禁止起床照镜子、天气铺陈、梦境骗局、百科式世界观和角色名单；本章只留一个长线问题；' : '明确承接上一章的后果；'}${continuityRules}${tomatoRules}只围绕一个核心事件；重大行为必须具备触发、动机、行动、后果；信息通过行动、对话、错误判断和感官释放；严格遵守 POV；只能点名演化契约的在场人物与授权的离场引用人物；不得按 Agent 顺序汇报行动，所有人物必须在同一条行动—反应—后果链中自然出现；不要均分戏份；章末钩子必须由本章因果产生；无叙事职责的生活细节必须删除。`
   const root = process.env.SEEDWORLD_DATA_DIR || path.resolve(process.cwd(), 'data'); const runDir = path.join(root, 'worlds', input.worldId, 'runs'); await mkdir(runDir, { recursive: true })
   let markdown = ''
   if (input.resumeDraftPath) {

@@ -7,6 +7,7 @@ import { getDatabase } from './database'
 import { getWorld, listArchive } from './novel-repository'
 import { chatJson } from './llm/openai-compat'
 import type { BookFoundation } from '@/domain/narrative-workflow'
+import { getPlatformBranch, platformBranchRules } from './platform-branch'
 
 const arr = (value: unknown) => Array.isArray(value) ? value.map((item) => String(item ?? '').trim()).filter(Boolean) : []
 const text = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value.trim() : fallback
@@ -145,12 +146,14 @@ export async function ensureStoryEngineDraft(worldId: string, force = false): Pr
   if (!force && existing && existing.foundationVersion === foundation.version && existing.status !== 'stale') return existing
   const world = getWorld(worldId)
   if (!world) throw new Error('世界不存在')
+  const branchRules = platformBranchRules(getPlatformBranch(world.writingSettings))
   const archive = listArchive(worldId, { limit: 200 })
   const anchors = storyAnchors(archive)
   if (anchors.length < 2) throw new Error('作品资料中缺少足够的具体实体，无法生成作品专属故事发动机')
   const claimIds = new Set(archive.claims.map((claim: any) => String(claim.id)))
   const basePrompt = [
       '你是通用长篇小说的故事架构师。根据作品资料提炼一个可持续但可变形的故事发动机。',
+      branchRules,
       '这里的“故事发动机”是小说内部反复产生人物目标、阻力、选择、代价与局部回报的戏剧机制，不是写作步骤或软件工作流。',
       '严禁写成用户需求、任务拆解、项目计划、解决方案、方法论、步骤清单、团队协作或反馈迭代。',
       '全部字段合计至少命中三个不同的作品锚点，核心体验、戏剧问题或重复情境中至少出现一个；不能只写“主角、敌人、危机、成长”等通用词。',

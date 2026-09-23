@@ -2,6 +2,7 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 import type { WorldSlice } from '@/domain/world'
+import { DEFAULT_WRITING_SETTINGS } from '@/domain/novel-graph'
 import type {
   BookFoundation, ChapterOutline, ChapterRelevance, EvolutionContract, HookType, NarrativePurpose,
   NarrativeQuestion, RequiredStateDelta, StateCondition, StoryArcPlan, VolumePlan,
@@ -14,6 +15,7 @@ import { getWorld, listArchive, listScenes, listStoryThreads } from './novel-rep
 import { ensureNarrativeHorizon, getNarrativeHorizon, syncNarrativeHorizonPointers } from './narrative-control-service'
 import { getStoryEngine } from './story-engine-service'
 import { ensureReaderQuestions, listReaderQuestions } from './reader-story-service'
+import { getPlatformBranch, platformBranchRules } from './platform-branch'
 
 const arr = (value: unknown, fallback: string[] = []): string[] => Array.isArray(value)
   ? value.map((item) => {
@@ -98,26 +100,33 @@ export async function ensureFoundationDraft(worldId: string): Promise<BookFounda
   if (!world) throw new Error('世界不存在')
   const archive = listArchive(worldId, { limit: 80 })
   let raw: Record<string, unknown>
-  let generationIssue = ''
   try {
     raw = await chatJson([{ role: 'user', content: `你是通用长篇小说总架构师。只依据资料建立作品根基，不预设终局，不写章节，不增加资料外的具体真相，不预设题材惯例。返回 JSON：corePromise,centralConflict,thematicQuestion,protagonistPressure,requiredLongTermQuestions[{question}],immutableRules[],forbiddenDirections[],forbiddenContent[],audiencePromise。核心矛盾必须有冲突方与不可兼得之处；长期问题不得预设唯一答案。\n作品：${world.title || ''}\n创作提示：${world.prompt.slice(0, 6000)}\n写作设置：${JSON.stringify(world.writingSettings)}\n事实摘要：${JSON.stringify(archive.claims.slice(0, 40))}` }], { maxTokens: 4096 })
   } catch (error) {
-    generationIssue = '作品根基由占位规则生成，必须人工补全后再确认：' + (error instanceof Error ? error.message : String(error))
-    raw = foundationFallback(worldId)
+    throw new Error('作品根基生成失败，未保存占位草案：' + (error instanceof Error ? error.message : String(error)))
   }
-  const fallback = foundationFallback(worldId)
+  const requiredQuestions = normalizeQuestions(raw.requiredLongTermQuestions, '').filter((item) => item.question.trim().length >= 8)
   const value = {
-    corePromise: text(raw.corePromise, fallback.corePromise), centralConflict: text(raw.centralConflict, fallback.centralConflict),
-    thematicQuestion: text(raw.thematicQuestion, fallback.thematicQuestion), protagonistPressure: text(raw.protagonistPressure, fallback.protagonistPressure),
-    requiredLongTermQuestions: normalizeQuestions(raw.requiredLongTermQuestions, fallback.requiredLongTermQuestions[0].question),
+    corePromise: text(raw.corePromise, ''), centralConflict: text(raw.centralConflict, ''),
+    thematicQuestion: text(raw.thematicQuestion, ''), protagonistPressure: text(raw.protagonistPressure, ''),
+    requiredLongTermQuestions: requiredQuestions,
     characterEndings: [], immutableRules: arr(raw.immutableRules), keyTurns: [], requiredForeshadows: [], forbiddenEndings: [],
-    forbiddenDirections: arr(raw.forbiddenDirections, fallback.forbiddenDirections),
-    forbiddenContent: arr(raw.forbiddenContent, fallback.forbiddenContent), audiencePromise: text(raw.audiencePromise, fallback.audiencePromise),
+    forbiddenDirections: arr(raw.forbiddenDirections),
+    forbiddenContent: arr(raw.forbiddenContent), audiencePromise: text(raw.audiencePromise, ''),
+  }
+  const missing = [
+    ['corePromise', value.corePromise],
+    ['centralConflict', value.centralConflict],
+    ['thematicQuestion', value.thematicQuestion],
+    ['protagonistPressure', value.protagonistPressure],
+    ['audiencePromise', value.audiencePromise],
+  ].filter(([, field]) => String(field).trim().length < 12).map(([name]) => name)
+  if (missing.length || !requiredQuestions.length || !value.immutableRules.length) {
+    throw new Error(`作品根基输出不完整，未保存草案：${[...missing, ...(!requiredQuestions.length ? ['requiredLongTermQuestions'] : []), ...(!value.immutableRules.length ? ['immutableRules'] : [])].join(', ')}；模型字段：${Object.keys(raw).join(', ')}`)
   }
   const id = randomUUID(); const now = new Date().toISOString()
   getDatabase().prepare('INSERT INTO book_foundations (id,world_id,version,status,foundation_json,created_at) VALUES (?,?,?,?,?,?)')
     .run(id, worldId, 1, 'draft', JSON.stringify(value), now)
-  if (generationIssue) getDatabase().prepare('UPDATE book_foundations SET validation_issues=? WHERE id=?').run(JSON.stringify([generationIssue]), id)
   return getLatestFoundation(worldId)!
 }
 
@@ -220,11 +229,13 @@ function normalizeChapterPlan(
     nextPressure: text(item.nextPressure, text(item.hookGoal, '')),
     advancedQuestionIds: arr(item.advancedQuestionIds), answeredQuestionIds: arr(item.answeredQuestionIds),
     createdQuestionIds: arr(item.createdQuestionIds), engineFunction: text(item.engineFunction, ''),
+    completesArc: item.arcDisposition === 'complete' || item.completesArc === true,
+    arcCompletionEvidence: text(item.arcCompletionEvidence, ''),
     status: 'planned',
   }
 }
 
-function rawOutlineIssues(raw: Record<string, unknown>): string[] {
+function rawOutlineIssues(raw: Record<string, unknown>, options: { isOpening?: boolean } = {}): string[] {
   const volumes = Array.isArray(raw.volumes) ? raw.volumes as Record<string, unknown>[] : []
   const firstVolume = volumes[0]
   const arcs = firstVolume && Array.isArray(firstVolume.arcs) ? firstVolume.arcs as Record<string, unknown>[] : []
@@ -238,10 +249,12 @@ function rawOutlineIssues(raw: Record<string, unknown>): string[] {
   }))
   chapters.forEach((chapter, index) => {
     const concepts = Array.isArray(chapter.newConcepts) ? chapter.newConcepts as unknown[] : []
-    const conceptLimit = index === 0 ? 1 : 2
-    const castLimit = index === 0 ? 3 : 4
+    const openingChapter = options.isOpening !== false && index === 0
+    const conceptLimit = openingChapter ? 1 : 2
+    const castLimit = openingChapter ? 3 : 4
     if (concepts.length > conceptLimit) issues.push(`第${index + 1}章新概念超过${conceptLimit}个`)
     if (Number(chapter.maxNamedCharacters || castLimit) > castLimit) issues.push(`第${index + 1}章具名人物超过${castLimit}名`)
+    if (chapter.arcDisposition === 'complete' && (typeof chapter.arcCompletionEvidence !== 'string' || !chapter.arcCompletionEvidence.trim())) issues.push(`第${index + 1}章宣告故事弧完成但缺少结算证据`)
   })
   const conflictModes = chapters.map((chapter) => String(chapter.conflictMode || '').trim()).filter(Boolean)
   if (chapters.length >= 3 && new Set(conflictModes).size < 2) issues.push('连续章节不能长期重复同一冲突形态')
@@ -290,6 +303,8 @@ export async function ensureRollingOutline(worldId: string): Promise<RollingOutl
   if (foundation.status !== 'confirmed') throw new Error('作品根基确认前不能生成正式滚动大纲')
   const engine = getStoryEngine(worldId)
   if (!engine || engine.status !== 'confirmed' || engine.foundationVersion !== foundation.version) throw new Error('请先确认与当前作品根基匹配的故事发动机')
+  const branchRules = platformBranchRules(getPlatformBranch(getWorld(worldId)?.writingSettings || DEFAULT_WRITING_SETTINGS))
+  if (branchRules) (engine as unknown as { platformBranchRules?: string }).platformBranchRules = branchRules
   ensureReaderQuestions(worldId)
   await ensureNarrativeHorizon(worldId, foundation)
   if (existingVolumes.length) {
@@ -298,6 +313,11 @@ export async function ensureRollingOutline(worldId: string): Promise<RollingOutl
     if (!existing.chapters.some((item) => item.status === 'planned')) {
       const activeArc = existing.arcs.find((item) => item.status === 'active')
       if (activeArc) return expandArc(worldId, activeArc.id)
+      const completedArc = [...existing.arcs].reverse().find((item) => item.status === 'completed')
+      if (completedArc) {
+        const successor = await createSuccessorArc(worldId, completedArc)
+        return expandArc(worldId, successor.id)
+      }
     }
     return existing
   }
@@ -306,7 +326,7 @@ export async function ensureRollingOutline(worldId: string): Promise<RollingOutl
 章节必须是一条因果链：第N章的困境必须由第N-1章的结果、选择或信息变化引发。每章只安排一个核心事件，必须有局部回报，并明确属于直接推进当前弧、建立带兑现期限的准备资产，或承接已发生事件的必要后果。只规划必须发生的状态变化，不规定人物必须用哪种行动实现。
 开篇弧从人物眼前处境扩展到小组冲突或制度的第一道裂缝，不得给出全书解法。故事弧结束应获得阶段答案和新的必要目标。不得用无依据的死亡、失踪、背叛或性格突变制造刺激。
 同时兑现作品的类型和读者承诺：一个故事弧至少使用三种由当前作品自然产生的冲突形态，例如可能是现场危机、证据追查、制度阻力、关系决裂、资源竞争、道德选择，但不得强行套用不属于该题材的类型。同一主要手段不得连续使用超过两章；每2至3章至少产生一次可见、不可轻易撤回的现实后果。行动场面必须产出证据、选择、关系或目标变化，不得只有热闹；安静章可以存在，但不得让整个故事弧变成连续查文件、问话、赶路或重复会议。
-返回 JSON：volumes[{title,goal,conflict,cost,endingTurn,arcs:[{title,goal,resistance,escalation,turn,result,cost,localSettlement,longTailResidue,allowedEscalationAxes[],chapters:[{goal,conflict,requiredChange,causalPrerequisite,globalRelevance,readerPayoff,scopeBoundary,deletionLoss,timeWindow,conflictMode,newConcepts[],maxNamedCharacters,narrativePurpose,hookType,hookGoal,inheritedConsequenceEventIds[],immediateGoal,centralObstacle,difficultChoice,irreversibleResult,concretePayoff,changedUnderstanding,nextPressure,advancedQuestionIds[],answeredQuestionIds[],createdQuestionIds[],engineFunction}]}]}]。narrativePurpose 只能取 advance_mainline/plant_foreshadow/strengthen_foreshadow/resolve_foreshadow/answer_question/change_relationship/change_goal_or_belief/show_consequence/build_pressure；hookType 只能取 crisis/mystery/desire/emotion/choice。
+返回 JSON：volumes[{title,goal,conflict,cost,endingTurn,arcs:[{title,goal,resistance,escalation,turn,result,cost,localSettlement,longTailResidue,allowedEscalationAxes[],chapters:[{goal,conflict,requiredChange,causalPrerequisite,globalRelevance,readerPayoff,scopeBoundary,deletionLoss,timeWindow,conflictMode,newConcepts[],maxNamedCharacters,narrativePurpose,hookType,hookGoal,inheritedConsequenceEventIds[],immediateGoal,centralObstacle,difficultChoice,irreversibleResult,concretePayoff,changedUnderstanding,nextPressure,advancedQuestionIds[],answeredQuestionIds[],createdQuestionIds[],engineFunction,arcDisposition:continue|complete,arcCompletionEvidence}]}]}]。只有当本章实际完成本弧局部结算并留下由结果产生的长线残留时，arcDisposition 才能为 complete；否则必须为 continue。narrativePurpose 只能取 advance_mainline/plant_foreshadow/strengthen_foreshadow/resolve_foreshadow/answer_question/change_relationship/change_goal_or_belief/show_consequence/build_pressure；hookType 只能取 crisis/mystery/desire/emotion/choice。
 生成前自检：如果相邻两章可以交换而不影响逻辑，说明因果不合格；如果某章删掉不影响后文，合并或重写；如果连续章节只是换地点、换对手、重复同类冲突，重新设计冲突类型或选择代价。
 作品根基：${JSON.stringify(foundationWithoutLegacyEnding(foundation))}\n故事发动机：${JSON.stringify(engine)}\n读者问题：${JSON.stringify(listReaderQuestions(worldId))}\n叙事地平线：${JSON.stringify(getNarrativeHorizon(worldId))}`
   try {
@@ -371,6 +391,42 @@ export function readOutline(worldId: string): RollingOutline {
   return { volumes, arcs, chapters }
 }
 
+async function createSuccessorArc(worldId: string, previousArc: StoryArcPlan): Promise<StoryArcPlan> {
+  const db = getDatabase()
+  const existing = db.prepare("SELECT plan_json FROM story_arcs WHERE world_id=? AND status IN ('active','planned') ORDER BY ordinal LIMIT 1").get(worldId) as { plan_json: string } | undefined
+  if (existing) return parse<StoryArcPlan>(existing.plan_json, null as never)
+  const volumeRow = db.prepare('SELECT plan_json FROM volumes WHERE id=? AND world_id=?').get(previousArc.volumeId, worldId) as { plan_json: string } | undefined
+  if (!volumeRow) throw new Error('上一故事弧缺少所属卷，无法规划后续')
+  const volume = parse<VolumePlan>(volumeRow.plan_json, null as never)
+  const engine = getStoryEngine(worldId)
+  if (!engine || engine.status !== 'confirmed') throw new Error('故事发动机未确认，不能规划下一故事弧')
+  const branchRules = platformBranchRules(getPlatformBranch(getWorld(worldId)?.writingSettings || DEFAULT_WRITING_SETTINGS))
+  const engineForPrompt = { ...engine, platformBranchRules: branchRules }
+  const recentEvents = db.prepare('SELECT id,tick,summary,narrative_purpose FROM events WHERE world_id=? AND published_chapter_id IS NOT NULL ORDER BY tick DESC,created_at DESC LIMIT 12').all(worldId)
+  const raw = await chatJson([{ role: 'user', content: `你是通用长篇小说故事弧架构师。上一故事弧已经完成。只能依据其真实结果、代价、遗留压力、当前卷方向和作品故事发动机，生成一个自然承接的下一故事弧；不得预设终局，不得换皮重复上一弧，不得凭空制造人物、能力或危机。返回 JSON：title,goal,centralConflict,resistance,escalation,turn,result,cost,localSettlement,longTailResidue,allowedEscalationAxes[]。下一弧必须改变冲突维度或选择代价，并说明阶段性结算与继续连载的残留。
+当前卷：${JSON.stringify(volume)}
+上一故事弧：${JSON.stringify(previousArc)}
+故事发动机：${JSON.stringify(engineForPrompt)}
+最近已发布事件：${JSON.stringify(recentEvents)}
+${branchRules}` }], { maxTokens: 4200, maxAttempts: 1 })
+  const required = ['title','goal','centralConflict','resistance','escalation','turn','result','cost','localSettlement','longTailResidue']
+  if (required.some((field) => !text(raw[field], ''))) throw new Error('下一故事弧缺少可执行的目标、阻力、转折、结果或代价')
+  const ordinal = Number((db.prepare('SELECT COALESCE(MAX(ordinal),0) AS value FROM story_arcs WHERE volume_id=?').get(previousArc.volumeId) as { value: number }).value) + 1
+  const id = randomUUID(); const now = new Date().toISOString()
+  const arc: StoryArcPlan = {
+    id, worldId, volumeId: previousArc.volumeId, ordinal, title: text(raw.title, `故事弧 ${ordinal}`), goal: text(raw.goal, previousArc.longTailResidue || previousArc.result), objective: text(raw.goal, previousArc.longTailResidue || previousArc.result),
+    centralConflict: text(raw.centralConflict, previousArc.centralConflict || previousArc.resistance), resistance: text(raw.resistance, previousArc.escalation), escalation: text(raw.escalation, previousArc.cost), turn: text(raw.turn, previousArc.longTailResidue || previousArc.turn),
+    result: text(raw.result, previousArc.longTailResidue || previousArc.result), cost: text(raw.cost, previousArc.cost), startConditionIds: [], completionConditionIds: [`arc-${id}-complete`],
+    failureConditionIds: [], forbiddenConditionIds: [], requiredConflictModes: [], obligationIds: [], localSettlement: text(raw.localSettlement, '当前弧的直接问题获得阶段性结算'),
+    longTailResidue: text(raw.longTailResidue, '本弧结果形成下一阶段必须处理的压力'), requiredQuestionIds: listReaderQuestions(worldId).filter((item:any) => item.status !== 'answered').map((item:any) => item.id),
+    allowedEscalationAxes: arr(raw.allowedEscalationAxes).filter((axis) => engine.escalationAxes.includes(axis)), usedConflictPatterns: [],
+    engineVersion: engine.version, status: 'active',
+  }
+  db.prepare('INSERT INTO story_arcs (id,world_id,volume_id,ordinal,title,plan_json,status,created_at) VALUES (?,?,?,?,?,?,?,?)').run(id, worldId, arc.volumeId, ordinal, arc.title, JSON.stringify(arc), arc.status, now)
+  syncNarrativeHorizonPointers(worldId)
+  return arc
+}
+
 export async function expandArc(worldId: string, arcId: string): Promise<RollingOutline> {
   const db = getDatabase()
   const row = db.prepare('SELECT a.plan_json,v.plan_json AS volume_json FROM story_arcs a JOIN volumes v ON v.id=a.volume_id WHERE a.world_id=? AND a.id=?').get(worldId, arcId) as { plan_json: string; volume_json: string } | undefined
@@ -382,22 +438,40 @@ export async function expandArc(worldId: string, arcId: string): Promise<Rolling
   const foundation = getLatestFoundation(worldId); const arc = parse<StoryArcPlan>(row.plan_json, null as never); const volume = parse<VolumePlan>(row.volume_json, null as never)
   const engine = getStoryEngine(worldId)
   if (!engine || engine.status !== 'confirmed') throw new Error('故事发动机未确认，不能展开故事弧')
+  const branchRules = platformBranchRules(getPlatformBranch(getWorld(worldId)?.writingSettings || DEFAULT_WRITING_SETTINGS))
+  if (branchRules) (engine as unknown as { platformBranchRules?: string }).platformBranchRules = branchRules
   ensureReaderQuestions(worldId)
   const recentEvents = db.prepare('SELECT id,tick,summary,narrative_purpose FROM events WHERE world_id=? AND published_chapter_id IS NOT NULL ORDER BY tick DESC,created_at DESC LIMIT 8').all(worldId)
   let raw: Record<string, unknown> = {}
   try {
     raw = await chatJson([{ role: 'user', content: `你是通用长篇小说架构师。当前弧已有 ${completedCount} 章正式发布；根据当前卷方向、故事发动机、已发布后果和当前故事弧目标，只生成下一章一个可执行章节，不预设本弧长度。下一章必须由上一章的具体结果、选择或信息变化引发。必须写明前置因果、对当前弧的职责、局部回报、长线残留、信息边界、删除损失、时间范围和冲突形态。只确定必须完成的变化，具体行动路径留给角色推演。
 首章最多3名具名人物、只演示1个陌生规则或核心概念；后续单章最多4名具名人物、最多2个新概念。当前弧不得跳过自身完成条件或提前解决长期问题。
-返回 JSON：chapters[{goal,conflict,requiredChange,causalPrerequisite,globalRelevance,readerPayoff,scopeBoundary,deletionLoss,timeWindow,conflictMode,newConcepts[],maxNamedCharacters,narrativePurpose,hookType,hookGoal,inheritedConsequenceEventIds[],immediateGoal,centralObstacle,difficultChoice,irreversibleResult,concretePayoff,changedUnderstanding,nextPressure,advancedQuestionIds[],answeredQuestionIds[],createdQuestionIds[],engineFunction}]。后续章 inheritedConsequenceEventIds 必须引用给出的已发布事件 ID；具体回报不能写成“谜团加深”或“局势升级”。\n全书契约：${JSON.stringify(foundationWithoutLegacyEnding(foundation!))}\n故事发动机：${JSON.stringify(engine)}\n读者问题：${JSON.stringify(listReaderQuestions(worldId))}\n最近已发布事件：${JSON.stringify(recentEvents)}\n当前卷：${JSON.stringify(volume)}\n当前弧：${JSON.stringify(arc)}` }], { maxTokens: 8192 })
+返回 JSON：chapters[{goal,conflict,requiredChange,causalPrerequisite,globalRelevance,readerPayoff,scopeBoundary,deletionLoss,timeWindow,conflictMode,newConcepts[],maxNamedCharacters,narrativePurpose,hookType,hookGoal,inheritedConsequenceEventIds[],immediateGoal,centralObstacle,difficultChoice,irreversibleResult,concretePayoff,changedUnderstanding,nextPressure,advancedQuestionIds[],answeredQuestionIds[],createdQuestionIds[],engineFunction,arcDisposition:continue|complete,arcCompletionEvidence}]。后续章 inheritedConsequenceEventIds 必须引用给出的已发布事件 ID；具体回报不能写成“谜团加深”或“局势升级”。只有当本章真实完成当前弧的局部结算、付出代价并产生下一弧入口时才可标记 complete。\n全书契约：${JSON.stringify(foundationWithoutLegacyEnding(foundation!))}\n故事发动机：${JSON.stringify(engine)}\n读者问题：${JSON.stringify(listReaderQuestions(worldId))}\n最近已发布事件：${JSON.stringify(recentEvents)}\n当前卷：${JSON.stringify(volume)}\n当前弧：${JSON.stringify(arc)}` }], { maxTokens: 4096, maxAttempts: 1 })
   } catch (error) { throw new Error('故事弧展开失败，已停止正式推演：' + (error as Error).message) }
-  const rawChapters = Array.isArray(raw.chapters) ? (raw.chapters as Record<string, unknown>[]).slice(0, 1) : []
-  if (rawChapters.length !== 1) throw new Error('滚动规划必须只生成一个下一章')
+  // Models occasionally return the single requested chapter as `chapter` or
+  // as the root object despite the array-shaped schema. Accept those
+  // equivalent single-object forms, but never silently collapse a genuine
+  // multi-chapter response into one chapter.
+  const rawChapterValue = raw.chapter
+  const rawChapters = Array.isArray(raw.chapters)
+    ? (raw.chapters as Record<string, unknown>[])
+    : rawChapterValue && typeof rawChapterValue === 'object'
+      ? [rawChapterValue as Record<string, unknown>]
+      : typeof raw.goal === 'string' || typeof raw.immediateGoal === 'string'
+        ? [raw]
+        : []
+  if (rawChapters.length !== 1) throw new Error('滚动规划必须只生成一个下一章（模型未返回单一章节对象）')
   const nextIssues = [
-    ...rawOutlineIssues({ volumes: [{ arcs: [{ chapters: rawChapters }] }] }),
+    ...rawOutlineIssues({ volumes: [{ arcs: [{ chapters: rawChapters }] }] }, { isOpening: completedCount === 0 }),
     ...microStoryIssues(rawChapters[0], {
       isFirst: completedCount === 0,
       publishedEventIds: new Set(recentEvents.map((event: any) => String(event.id))),
       readerQuestionIds: new Set(listReaderQuestions(worldId).map((item: any) => String(item.id))),
+      // Existing works can predate the reader-question ledger and often use
+      // concise choice language. Do not let migration details freeze a
+      // runnable continuation; substantive empty fields remain blocking.
+      allowLocalProgress: completedCount > 0,
+      allowInformalChoice: completedCount > 0,
     }),
   ]
   if (nextIssues.length) throw new Error(`下一章合同未通过确定性校验：${nextIssues.join('；')}`)
@@ -408,7 +482,7 @@ export async function expandArc(worldId: string, arcId: string): Promise<Rolling
     const chapter = normalizeChapterPlan(item, completedCount + index, { worldId, arcId, arc, foundation: foundation!, count: totalCount })
     db.prepare('INSERT INTO chapter_outlines (id,world_id,arc_id,ordinal,outline_json,status,created_at) VALUES (?,?,?,?,?,?,?)').run(chapter.id, worldId, arcId, chapter.ordinal, JSON.stringify(chapter), chapter.status, now)
   })
-  db.prepare("UPDATE story_arcs SET status='active' WHERE id=?").run(arcId)
+  db.prepare("UPDATE story_arcs SET status='active',plan_json=json_set(plan_json,'$.status','active') WHERE id=?").run(arcId)
   return readOutline(worldId)
 }
 
