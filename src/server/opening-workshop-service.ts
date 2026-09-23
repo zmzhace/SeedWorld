@@ -78,71 +78,79 @@ async function runOpeningDraft(runId: string, worldId: string) {
     const sourceActors = actors.slice(0, 6).map((item: any) => ({ id: item.genetics?.seed, name: item.identity?.name, goal: item.goals?.[0], location: item.location }))
     report(runId, { status: 'running', stage: 'contract', progress: 15, message: '正在锁定单一视角和开篇压力' })
     let plan = await chatJson([{ role: 'system', content: '你服务于中文网络小说平台。所有自然语言字段必须使用简体中文，不得输出英文。' }, { role: 'user', content: `你是长篇类型小说的首章场景编辑。只设计一个能直接写成小说的现场，不写世界观，不写人物小传，不规划后续章节。
-首章只需要回答七件事：谁在现场、他现在必须做什么、什么正在阻止他、他要在什么代价之间选择、选择造成什么结果、读者得到什么局部回报、下一章为什么必须继续。
-开头必须从正在发生的动作或异常切入。只允许一个连续地点、一个POV、一个即时目标、一个主要阻碍、一次困难选择和一个不可逆结果。默认最多两名具名人物，不要求解释人物背景；最多一个陌生概念，不要求解释完整原理。
-返回严格JSON，字段只能是：title,povId,povName,immediateGoal,obstacle,difficultChoice,consequence,localPayoff,hook,allowedNamedCharacters[],allowedConcepts[]。不要返回 beats、设定说明、历史、阵营或“为什么这样设计”。
+首章只需要回答七件事：谁在现场、他现在必须做什么、什么正在阻止他、他要在什么代价之间选择、选择造成什么结果、读者得到什么局部回报、下一章为什么必须继续。结果必须是当场发生且改变下一步行动的具体后果，不能用“仍不知道”“继续观察”“被带走”“事情还没解决”冒充结果。
+开头必须从正在发生的动作或异常切入。只允许一个连续地点、一个POV、一个即时目标、一个主要阻碍、一次困难选择和一个不可逆结果。默认最多两名现场人物，不要求解释人物背景；最多两个新信息单元，其中至多一个是抽象规则/概念，另一个必须是当前动作中真正被使用的具体道具。
+返回严格JSON，字段只能是：title,povId,povName,immediateGoal,obstacle,difficultChoice,consequence,localPayoff,hook,allowedNamedCharacters[],allowedConcepts[]。allowedNamedCharacters 只列现场人物，最多两人；如果主线确实需要一个场外锚点，只能在 obstacle、consequence 或 hook 中出现一个姓名，不得再列第二个场外姓名。不要返回 beats、设定说明、历史、阵营或“为什么这样设计”。
 作品承诺与首章压力：${JSON.stringify({ corePromise: foundation.corePromise, centralConflict: foundation.centralConflict, thematicQuestion: foundation.thematicQuestion, protagonistPressure: foundation.protagonistPressure, immutableRules: foundation.immutableRules.slice(0, 8), openingBrief: persisted.summary.slice(0, 3200) })}
 可选POV：${JSON.stringify(sourceActors)}
 ` }], { maxTokens: 2400, maxAttempts: 2 })
     const planComplete = (value: Record<string, unknown>) => Boolean(
       clip(value.povId) && clip(value.povName) && clip(value.immediateGoal) && clip(value.obstacle) &&
-      clip(value.difficultChoice) && clip(value.consequence) && clip(value.localPayoff),
+      clip(value.difficultChoice) && clip(value.consequence) && clip(value.localPayoff) &&
+      !/(仍然不知道|仍不清楚|继续观察|被带走|事情还没解决|没有结果)/.test(`${value.consequence} ${value.localPayoff}`),
     )
     if (!planComplete(plan)) {
       report(runId, { status: 'running', stage: 'contract-repair', progress: 24, message: '首章场景卡缺少必要字段，正在请求结构化修复' })
       plan = await chatJson([
         { role: 'system', content: '你只负责修复首章场景卡的缺失字段。所有自然语言字段必须是简体中文；不得新增人物、地点、世界规则或后续剧情。' },
-        { role: 'user', content: `把下面的首章场景卡修复成完整 JSON。只能补齐缺失或空白字段，已有内容尽量原样保留。必须包含：title,povId,povName,immediateGoal,obstacle,difficultChoice,consequence,localPayoff,hook,allowedNamedCharacters[],allowedConcepts[]。只能一个连续场景、一个 POV、一个目标、一个阻碍、一次困难选择和一个结果；最多两名具名人物、一个陌生概念。可选人物：${JSON.stringify(sourceActors)}\n原场景卡：${JSON.stringify(plan)}` },
+        { role: 'user', content: `把下面的首章场景卡修复成完整 JSON。只能补齐缺失或空白字段，已有内容尽量原样保留。必须包含：title,povId,povName,immediateGoal,obstacle,difficultChoice,consequence,localPayoff,hook,allowedNamedCharacters[],allowedConcepts[]。只能一个连续场景、一个 POV、一个目标、一个阻碍、一次困难选择和一个结果；最多两名现场人物，最多一个抽象概念和一个具体道具。可选人物：${JSON.stringify(sourceActors)}\n原场景卡：${JSON.stringify(plan)}` },
       ], { maxTokens: 2400, maxAttempts: 2 })
     }
     const povId = clip(plan.povId, 120)
     const povName = clip(plan.povName, 40)
     const allowedNames = Array.isArray(plan.allowedNamedCharacters) ? plan.allowedNamedCharacters.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 2) : [povName].filter(Boolean)
     if (povName && !allowedNames.includes(povName)) allowedNames.unshift(povName)
-    const allowedConcepts = Array.isArray(plan.allowedConcepts) ? plan.allowedConcepts.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 1) : []
+    const allowedConcepts = Array.isArray(plan.allowedConcepts) ? plan.allowedConcepts.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 2) : []
     if (!povId || !povName || !plan.immediateGoal || !plan.obstacle || !plan.difficultChoice || !plan.consequence || !plan.localPayoff) throw new Error('首章场景卡不完整，未生成通用兜底剧情')
 
     report(runId, { status: 'running', stage: 'draft', progress: 42, message: '正在按首章信息预算写作' })
     const contract = { title: clip(plan.title, 80), povId, povName, immediateGoal: clip(plan.immediateGoal, 260), obstacle: clip(plan.obstacle, 260), difficultChoice: clip(plan.difficultChoice, 260), consequence: clip(plan.consequence, 260), localPayoff: clip(plan.localPayoff, 260), hook: clip(plan.hook, 260), allowedNamedCharacters: allowedNames, allowedConcepts }
     let markdown = await chatText([{ role: 'system', content: '你是成熟的中文网络小说作者。必须使用简体中文写作；如果上一条指令与此冲突，仍然只输出简体中文正文。' }, { role: 'user', content: `根据首章场景卡写完整正文，只输出Markdown，不解释写法。
 从现场正在发生的动作开始，不要从醒来、照镜子、天气、梦境、穿越说明或历史介绍开始。全文只写一个连续场景：POV为${contract.povName}，他有一个现在必须完成的目标，遇到一个正在发生的阻碍，在两个都有代价的选择中做决定，并承担结果。人物通过动作和对话自然出现，不轮流介绍，不平均分配戏份。正文必须使用简体中文；候选人物的英文内部名只用于识别，正文请使用场景卡中的中文姓名，不要把英文名直接写进正文。
-只允许出现这些具名人物：${JSON.stringify(allowedNames)}。只允许出现这个陌生概念清单：${JSON.stringify(allowedConcepts)}。清单为空就不要创造新术语。不要解释世界全貌、阵营、能力体系或人物前史。章末必须落在本章结果造成的下一压力上，不凭空增加危机。
+只允许出现这些现场具名人物：${JSON.stringify(allowedNames)}；除此之外最多允许三个与当前目标直接相关的场外关键姓名，不能形成角色名单。身份称呼（如“太太”“老太太”“门外的大夫”）不算新增人物。这里的“出现”包括正文、对话、回忆、旁白和顺带提及；不得把场外人物写成一串名单。只允许出现这些新信息单元：${JSON.stringify(allowedConcepts)}；其中最多一个抽象概念，另一个必须是当前动作中真正使用的具体道具。清单为空就不要创造新术语。不要解释世界全貌、阵营、能力体系或人物前史。章末必须落在本章结果造成的下一压力上，不凭空增加危机；主角必须通过一次具体动作、承诺、隐瞒、破坏或离开，获得局部回报并让下一步选择发生变化。
 建议长度 1800 至 2400 字，宁可把一个现场写完整，也不要添加第二个事件。
 首章场景卡：${JSON.stringify(contract)}
-` }], { maxTokens: 4600, maxAttempts: 2 })
+` }], { maxTokens: 4600, maxAttempts: 2, temperature: 0.55 })
     debugMarkdown = markdown
 
     let review: Record<string, unknown> = {}
     for (let revision = 0; revision < 2; revision++) {
       report(runId, { status: 'running', stage: 'review', progress: 68 + revision * 12, message: revision ? '正在复审修订稿' : '正在执行首章读者测试' })
       const localStyleIssues = openingStyleIssues(markdown)
-      review = await chatJson([{ role: 'system', content: '你是中文网络小说首章审稿人。正文若不是简体中文，必须 passed=false。unexplainedItems 只允许列出会让读者无法理解当前目标、阻碍、选择或结果的关键人物、概念或事实；不要把成语、诗句、节令日期、器物名称、普通动作和暂时没有背景解释的细节列为问题。' }, { role: 'user', content: `你是不知道世界设定的首章读者。只读正文与允许名单，返回严格JSON：pov,goal,obstacle,choice,result,payoff,reasonToContinue,namedCharacters[],newConcepts[],unexplainedItems[],informationDumpQuotes[],passed。
-passed只能在以下条件全部成立时为true：可清楚复述目标-阻碍-选择-结果；有具体局部回报；具名人物不超过允许名单且总数不超过2；陌生核心概念不超过1；没有设定说明段；无需查资料即可理解当下场景。unexplainedItems只能列出会阻断当前场景理解的内容，不要因为人物背景、世界历史或术语原理尚未解释就列出问题。
+      review = await chatJson([{ role: 'system', content: '你是中文网络小说首章审稿人。正文若不是简体中文，必须 passed=false。namedCharacters 必须列出正文中出现的每一个人物姓名、称谓和代号，包括回忆、旁白、对话和场外提及，不得只列主要人物；但“二爷、老太太、太太、老祖宗、门外的大夫”等身份称呼不算新增人物。允许两名现场人物之外出现最多三个与当前目标直接相关的场外锚点姓名，但这些姓名必须服务于当前目标、阻碍、选择或结果，不能形成角色名单。unexplainedItems 只允许列出会让读者无法理解当前目标、阻碍、选择或结果的关键人物、概念或事实；不要把成语、诗句、节令日期、器物名称、普通动作和暂时没有背景解释的细节列为问题。' }, { role: 'user', content: `你是不知道世界设定的首章读者。只读正文与允许名单，返回严格JSON：pov,goal,obstacle,choice,result,payoff,reasonToContinue,namedCharacters[],newConcepts[],unexplainedItems[],informationDumpQuotes[],passed。
+passed只能在以下条件全部成立时为true：可清楚复述目标-阻碍-选择-结果；有具体局部回报；现场具名人物不超过允许名单，另最多三个服务于当前冲突的场外锚点；不能形成角色名单；身份称呼不计入人物数；新信息单元不超过2个，其中最多一个抽象概念、最多一个当前动作使用的具体道具；没有设定说明段；无需查资料即可理解当下场景。unexplainedItems只能列出会阻断当前场景理解的内容，不要因为人物背景、世界历史或术语原理尚未解释就列出问题。
 机械检查问题（即使正文结构完整也必须修复）：${JSON.stringify(localStyleIssues)}
 允许人物：${JSON.stringify(allowedNames)}
 允许概念：${JSON.stringify(allowedConcepts)}
 正文：${markdown}` }], { maxTokens: 3200, maxAttempts: 2 })
+      const roleReferences = new Set(['二爷', '老太太', '太太', '老祖宗', '贾母', '老爷', '夫人', '姑娘', '小姐', '公子', '奶奶', '婆子', '丫头', '大夫', '太医', '小厮'])
       const names = Array.isArray(review.namedCharacters) ? review.namedCharacters.map(String).filter(Boolean) : []
+      const personNames = names.filter((name) => {
+        const normalized = name.trim()
+        return !roleReferences.has(normalized) && !/(姐姐|大奶奶|奶奶|夫人|太太|老太太|老祖宗|丫头|婆子|小厮|大夫|太医)$/.test(normalized) && !/[A-Za-z]/.test(normalized)
+      })
       const concepts = Array.isArray(review.newConcepts) ? review.newConcepts.map(String).filter(Boolean) : []
       const unexplained = Array.isArray(review.unexplainedItems)
         ? review.unexplainedItems.map(String).filter(Boolean).filter((item) => !/^(?:上元|中秋|端午|除夕|初一|初二|前三日|后三日)/.test(item.trim()) && !/^[\u4e00-\u9fff]{4}$/.test(item.trim()))
         : []
       const dumps = Array.isArray(review.informationDumpQuotes) ? review.informationDumpQuotes.map(String).filter(Boolean) : []
       const missingCore = ['pov', 'goal', 'obstacle', 'choice', 'result', 'payoff'].some((key) => !clip(review[key]))
-      const unauthorizedNames = names.filter((name) => !allowedNames.includes(name))
+      const unauthorizedNames = personNames.filter((name) => !allowedNames.includes(name))
+      const blockedUnauthorizedNames = unauthorizedNames.length > 3 ? unauthorizedNames : []
       const unauthorizedConcepts = concepts.filter((concept) => !allowedConcepts.includes(concept))
       // A name is not an error merely because its history is not explained.
       // The first chapter only needs to make its current role legible.
-      const passed = review.passed === true && !localStyleIssues.length && !missingCore && names.length <= 2 && !unauthorizedNames.length && !unauthorizedConcepts.length && !unexplained.length && !dumps.length
+      const passed = !localStyleIssues.length && !missingCore && personNames.length <= 5 && concepts.length <= 2 && !blockedUnauthorizedNames.length && !unauthorizedConcepts.length && !unexplained.length && !dumps.length
       review = { ...review, namedCharacters: names, newConcepts: concepts, unexplainedItems: unexplained, informationDumpQuotes: dumps, passed }
       lastReview = review
       if (passed) break
       if (revision === 1) throw new Error(`首章修订后仍未通过读者测试：${[...unexplained, ...dumps].slice(0, 4).join('；') || '无法清楚复述目标、阻碍、选择和结果'}`)
       report(runId, { status: 'running', stage: 'revise', progress: 78, message: '正在删除多余人物、概念和设定解释' })
-      markdown = await chatText([{ role: 'system', content: '你是中文网络小说修订作者。必须只输出简体中文正文，禁止英文、模板化命运旁白和空泛总结。' }, { role: 'user', content: `根据读者测试修订整篇首章，只输出Markdown正文。不得新增人物、概念、历史、阵营或危机。优先删除信息，不得用更长解释修补。
+      markdown = await chatText([{ role: 'system', content: '你是中文网络小说修订作者。必须只输出简体中文正文，禁止英文、模板化命运旁白和空泛总结。名单外人名即使只是提及也必须删除或改成身份泛称。' }, { role: 'user', content: `根据读者测试修订整篇首章，只输出Markdown正文。不得新增人物、概念、历史、阵营或危机。优先删除信息，不得用更长解释修补。
+名单外人名（超过三个才必须全部删除或改成身份泛称）：${JSON.stringify(blockedUnauthorizedNames)}
 读者测试：${JSON.stringify(review)}
 首章合同：${JSON.stringify(contract)}
-原文：${markdown}` }], { maxTokens: 5200, maxAttempts: 2 })
+原文：${markdown}` }], { maxTokens: 5200, maxAttempts: 2, temperature: 0.4 })
       debugMarkdown = markdown
     }
 
@@ -160,6 +168,7 @@ passed只能在以下条件全部成立时为true：可清楚复述目标-阻碍
         const dir = path.join(root, 'worlds', worldId, 'opening-workshop')
         await mkdir(dir, { recursive: true })
         await writeFile(path.join(dir, `${runId}.failed.md`), debugMarkdown, 'utf8')
+        if (lastReview) await writeFile(path.join(dir, `${runId}.review.json`), JSON.stringify(lastReview, null, 2), 'utf8')
       } catch { /* preserve the original workflow error */ }
     }
     const reviewHint = lastReview ? `；读者复述：${clip(lastReview.goal, 80)} / ${clip(lastReview.obstacle, 80)} / ${clip(lastReview.choice, 80)} / ${clip(lastReview.result, 80)}` : ''
