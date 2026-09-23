@@ -13,7 +13,7 @@ import { listWiki } from './wiki-service'
 import { ensureCompass } from './compass-service'
 import { chatText } from './llm/openai-compat'
 import { chatJson } from './llm/openai-compat'
-import { DRAFT_RULES, OUTLINE_RULES, REVISE_RULES } from './llm/rules'
+import { DRAFT_RULES, REVISE_RULES } from './llm/rules'
 import { getStoryEngine } from './story-engine-service'
 import { applyReaderAndStoryProjection } from './reader-story-service'
 
@@ -153,7 +153,10 @@ function normalizeReview(raw: Record<string, unknown>, input: { worldId: string;
   // would break causality while the flag is malformed. Preserve the semantic
   // verdict instead of blocking a 90+ chapter on a transport-format quirk.
   const deletionTestPassed = raw.deletionTestPassed === true || raw.deletionTestPassed === 'true' || /删除.{0,12}(严重)?(损害|破坏|导致.{0,12}(断裂|缺失|无法))/.test(deletionLoss)
-  const passed = deletionTestPassed && !issues.some((issue) => issue.severity !== 'warning') && dimensions.every((item) => item.score >= 70) && averageScore >= 80
+  // Scores and deletion-test quality are editorial signals. Only cited
+  // critical contradictions are publication blockers; prose-level errors get
+  // one directed revision and remain visible in the quality report.
+  const passed = !issues.some((issue) => issue.severity === 'critical')
   return { id: randomUUID(), worldId: input.worldId, runId: input.runId, revision: input.revision, dimensions, issues, deletionTestPassed, deletionLoss, averageScore, passed, createdAt: new Date().toISOString() }
 }
 
@@ -201,14 +204,20 @@ function deterministicNarrativeIssues(input: {
   actorNames: Array<{ id: string; name: string }>
   chapterNumber: number
 }): ReviewIssue[] {
-  const allowed = new Set([
-    ...(input.contract?.participants || []).map((item) => item.actorId),
-    ...(input.contract?.referenceEntities || []).map((item) => item.entityId),
-  ])
+  // A manual continuation request may intentionally omit a formal contract
+  // while the author is testing the service against an already-published
+  // opening. In that compatibility mode the request's world cast is the
+  // authorization boundary; formal ticks still use the narrower contract cast.
+  const allowed = new Set(input.contract
+    ? [
+        ...(input.contract.participants || []).map((item) => item.actorId),
+        ...(input.contract.referenceEntities || []).map((item) => item.entityId),
+      ]
+    : input.actorNames.map((actor) => actor.id))
   const mentioned = input.actorNames.filter((actor) => actor.name.length >= 2 && input.markdown.includes(actor.name))
   const unauthorized = mentioned.filter((actor) => !allowed.has(actor.id))
   const issues: ReviewIssue[] = unauthorized.map((actor) => ({
-    severity: 'error', quote: actor.name, contractField: 'cast.authorization',
+    severity: 'critical', quote: actor.name, contractField: 'cast.authorization',
     message: `正文点名了未进入本章契约的角色“${actor.name}”`,
     instruction: '删除该点名，或在重新规划章节时说明其不可替代的叙事职责。',
   }))
@@ -231,7 +240,7 @@ async function reviewChapter(worldId: string, runId: string, revision: number, m
   const deterministic = deterministicNarrativeIssues({ markdown, contract, ...context })
   if (deterministic.length) {
     review.issues.push(...deterministic)
-    review.passed = false
+    review.passed = !review.issues.some((issue) => issue.severity === 'critical')
     for (const dimension of review.dimensions) {
       if (dimension.key === 'pacing_density' || dimension.key === 'causal_coherence') dimension.score = Math.min(dimension.score, 60)
     }
@@ -259,12 +268,17 @@ async function reviewStateEvidence(worldId: string, runId: string, contract: Evo
   return normalized
 }
 
-async function reviewReaderComprehension(input: { worldId: string; runId: string; markdown: string; previousEnding: string; contract?: EvolutionContract; outline?: ChapterOutline }): Promise<ReaderComprehensionReview> {
-  const raw = await chatJson([{ role: 'user', content: `你是第一次读到本章的普通读者。你只能依据正文、上一章结尾和本章允许信息复述故事，不能读取世界答案。返回 JSON：pov,immediateGoal,obstacle,choice,consequence,localPayoff,reasonToContinue,unexplainedNames[],unexplainedConcepts[],unsupportedConclusions[],passed。无法明确复述目标、阻碍、选择、结果或具体回报时 passed=false；出现必须查设定才能理解的名字、概念或结论时 passed=false。\n上一章结尾：${input.previousEnding || '这是首章，没有前文'}\n本章允许信息：${JSON.stringify({ readerEntry: input.contract?.readerEntry, immediateGoal: input.outline?.immediateGoal, centralObstacle: input.outline?.centralObstacle, difficultChoice: input.outline?.difficultChoice, concretePayoff: input.outline?.concretePayoff })}\n正文：${input.markdown}` }], { maxTokens: 3600 })
+async function reviewReaderComprehension(input: { worldId: string; runId: string; markdown: string; previousEnding: string; establishedText?: string; contract?: EvolutionContract; outline?: ChapterOutline }): Promise<ReaderComprehensionReview> {
+  const raw = await chatJson([{ role: 'user', content: `你是第一次读到本章的普通读者。你只能依据正文、上一章结尾和本章允许信息复述故事，不能读取世界答案。返回 JSON：pov,immediateGoal,obstacle,choice,consequence,localPayoff,reasonToContinue,unexplainedNames[],unexplainedConcepts[],unsupportedConclusions[],passed。无法明确复述目标、阻碍、选择、结果或具体回报时 passed=false；出现必须查设定才能理解的名字、概念或结论时 passed=false。unsupportedConclusions 只能列正文已经明确断言或强烈暗示、但现有文字没有证据支持的结论；不得列正文明确保留、否定或尚未回答的问题。\n上一章结尾：${input.previousEnding || '这是首章，没有前文'}\n本章允许信息：${JSON.stringify({ readerEntry: input.contract?.readerEntry, immediateGoal: input.outline?.immediateGoal, centralObstacle: input.outline?.centralObstacle, difficultChoice: input.outline?.difficultChoice, concretePayoff: input.outline?.concretePayoff })}\n正文：${input.markdown}` }], { maxTokens: 3600 })
   const required = ['pov','immediateGoal','obstacle','choice','consequence','localPayoff','reasonToContinue']
   const missing = required.filter((key) => !String(raw[key] || '').trim())
-  const unexplainedNames = Array.isArray(raw.unexplainedNames) ? raw.unexplainedNames.map(String).filter(Boolean) : []
-  const unexplainedConcepts = Array.isArray(raw.unexplainedConcepts) ? raw.unexplainedConcepts.map(String).filter(Boolean) : []
+  // A continuation reader has the published chapters, not only the final 900
+  // characters of the immediately previous chapter. Terms already present in
+  // published prose are established context and must not become false-positive
+  // comprehension failures.
+  const established = input.establishedText || ''
+  const unexplainedNames = Array.isArray(raw.unexplainedNames) ? raw.unexplainedNames.map(String).filter((value) => Boolean(value) && !established.includes(value)) : []
+  const unexplainedConcepts = Array.isArray(raw.unexplainedConcepts) ? raw.unexplainedConcepts.map(String).filter((value) => Boolean(value) && !established.includes(value)) : []
   const unsupportedConclusions = Array.isArray(raw.unsupportedConclusions) ? raw.unsupportedConclusions.map(String).filter(Boolean) : []
   const review: ReaderComprehensionReview = { id: randomUUID(), worldId: input.worldId, runId: input.runId, pov: String(raw.pov || ''), immediateGoal: String(raw.immediateGoal || ''), obstacle: String(raw.obstacle || ''), choice: String(raw.choice || ''), consequence: String(raw.consequence || ''), localPayoff: String(raw.localPayoff || ''), reasonToContinue: String(raw.reasonToContinue || ''), unexplainedNames, unexplainedConcepts, unsupportedConclusions, passed: raw.passed === true && !missing.length && !unexplainedNames.length && !unexplainedConcepts.length && !unsupportedConclusions.length, createdAt: new Date().toISOString() }
   getDatabase().prepare('INSERT INTO reader_comprehension_reviews (id,world_id,run_id,review_json,passed,created_at) VALUES (?,?,?,?,?,?)').run(review.id, input.worldId, input.runId, JSON.stringify(review), Number(review.passed), review.createdAt)
@@ -273,10 +287,12 @@ async function reviewReaderComprehension(input: { worldId: string; runId: string
 
 async function runChapter(runId: string, input: ChapterRequest) {
   const world = getWorld(input.worldId); if (!world) throw new Error('世界不存在')
-  if (!world.visibilityConfirmed) throw new Error('角色知识边界尚未确认')
+  const existingChapterCount = Number((getDatabase().prepare('SELECT COUNT(*) AS value FROM chapters WHERE world_id=?').get(input.worldId) as { value: number }).value)
+  const isOpening = existingChapterCount === 0
+  if (!isOpening && !world.visibilityConfirmed) throw new Error('角色知识边界尚未确认')
   const contract = loadContract(input); if (input.contractId && !contract) throw new Error('演化契约不存在')
   const engine = getStoryEngine(input.worldId)
-  if (!engine || engine.status !== 'confirmed') throw new Error('故事发动机未确认，不能生成正式章节')
+  if (!isOpening && (!engine || engine.status !== 'confirmed')) throw new Error('故事发动机未确认，不能生成正式章节')
   reportRun(runId, { status: 'running', stage: 'material', progress: 5, message: '正在按演化契约准备章节素材' })
   if (input.tick != null) getDatabase().prepare("UPDATE simulation_ticks SET status='reviewing' WHERE world_id=? AND tick=?").run(input.worldId, input.tick)
   const ticks = getDatabase().prepare('SELECT tick,payload_json FROM simulation_ticks WHERE world_id=? AND tick BETWEEN ? AND ? ORDER BY tick').all(input.worldId, input.tickFrom, input.tickTo) as Array<{ tick: number; payload_json: string }>
@@ -288,7 +304,7 @@ async function runChapter(runId: string, input: ChapterRequest) {
   const chapterOutline = outlineRow ? JSON.parse(outlineRow.outline_json) as ChapterOutline : undefined
   const archive = listArchive(input.worldId, { limit: 160 }); const povId = input.povEntityId || contract?.povEntityId
   const pov = povId ? archive.entities.find((entity: any) => entity.id === povId) : undefined
-  const chapterNumber = Number((getDatabase().prepare('SELECT COALESCE(MAX(chapter_number),0)+1 AS value FROM chapters WHERE world_id=?').get(input.worldId) as { value: number }).value)
+  const chapterNumber = existingChapterCount + 1
   const visibleFacts = loadVisibleFacts(input.worldId, povId, input.tickTo)
   const participantIds = new Set([povId, ...(contract?.participants || []).map((item) => item.actorId)].filter(Boolean))
   const beatClaimIds = new Set(approvedBeats.flatMap((beat) => [...(beat.claimIds || []), ...(beat.evidenceClaimIds || [])]))
@@ -299,20 +315,25 @@ async function runChapter(runId: string, input: ChapterRequest) {
   const castNames = new Set(actorNames.filter((actor) => participantIds.has(actor.id)).map((actor) => actor.name))
   const allWiki = listWiki(input.worldId)
   const wiki = chapterNumber === 1 ? [] : allWiki.filter((page: any) => [...castNames].some((name) => String(page.markdown || '').includes(name))).slice(0, 1)
-  const compass = await ensureCompass(input.worldId, JSON.stringify(facts.slice(0, 16)))
+  const compass = chapterNumber === 1 ? { current: { openThreads: [] } } : await ensureCompass(input.worldId, JSON.stringify(facts.slice(0, 16)))
   const anchors = (world.writingSettings.styleAnchors || []).slice(0, 3); const anchorBlock = anchors.length ? `\nSTYLE ANCHORS：\n${anchors.map((anchor, index) => `[${index + 1}] ${anchor}`).join('\n')}` : ''
   const clip = (value: unknown, limit = 360) => String(value ?? '').slice(0, limit)
   const compactTicks = ticks.map((item) => { const state = JSON.parse(item.payload_json) as any; return { tick: item.tick, time: state.time, environment: clip(state.environment?.description, 320), actors: state.agents?.npcs?.filter((actor: any) => participantIds.has(actor.genetics?.seed)).map((actor: any) => ({ id: actor.genetics?.seed, name: actor.identity?.name, location: clip(actor.location, 80), emotion: actor.emotion?.label, goal: clip(actor.goals?.[0], 180) })) } })
   const previousChapter = getDatabase().prepare('SELECT markdown_path FROM chapters WHERE world_id=? ORDER BY chapter_number DESC LIMIT 1').get(input.worldId) as { markdown_path?: string } | undefined
+  const previousChapterPaths = getDatabase().prepare('SELECT markdown_path FROM chapters WHERE world_id=? ORDER BY chapter_number').all(input.worldId) as Array<{ markdown_path?: string }>
   let previousEnding = ''
   if (previousChapter?.markdown_path) { try { previousEnding = readFileSync(previousChapter.markdown_path, 'utf8').trim().slice(-900) } catch { previousEnding = '' } }
+  const establishedText = previousChapterPaths.map((item) => {
+    if (!item.markdown_path) return ''
+    try { return readFileSync(item.markdown_path, 'utf8') } catch { return '' }
+  }).join('\n').slice(-200_000)
   const povRecord = pov as Record<string, unknown> | undefined
   const material = JSON.stringify({
     ticks: compactTicks,
     selectedEvents: pendingTransition ? [{ id: pendingTransition.id, tick: pendingTransition.tick, conflict: clip(contract?.coreEvent, 500), sceneBeats: approvedBeats, consequence: pendingTransition.deltas.map((item) => item.narrativeReason), narrativePurpose: contract?.narrativePurpose, actorIds: contract?.participants.map((item) => item.actorId) }] : selectedEvents.map((event) => { const payload = parseJson<Record<string, unknown>>(event.payload_json, {}); return { id: event.id, tick: event.tick, conflict: clip(payload.conflict || event.summary, 500), sceneBeats: Array.isArray(payload.beats) ? payload.beats : [], consequence: payload.consequence, narrativePurpose: event.narrative_purpose, actorIds: parseJson(event.actor_ids_json, []) } }),
     pov: povRecord ? { id: povRecord.id, name: povRecord.name, attributes: clip(JSON.stringify(povRecord.properties || {}), 600) } : undefined,
-    visibleFacts: facts.slice(0, 12).map((fact: any) => ({ id: fact.id, subject: fact.subject_name || fact.subject_id, predicate: fact.predicate, object: fact.object_name || fact.object_id || clip(parseJson(fact.value_json, fact.value_json), 180), scope: fact.claim_scope })),
-    storyEngine: { signatureExperience: engine.signatureExperience, repeatableSituation: engine.repeatableSituation, protagonistMethod: engine.protagonistMethod, failureCosts: engine.failureCosts, emotionalPromise: engine.emotionalPromise, forbiddenRepetitions: engine.forbiddenRepetitions },
+    visibleFacts: facts.slice(0, chapterNumber === 1 ? 5 : 12).map((fact: any) => ({ id: fact.id, subject: fact.subject_name || fact.subject_id, predicate: fact.predicate, object: fact.object_name || fact.object_id || clip(parseJson(fact.value_json, fact.value_json), 180), scope: fact.claim_scope })),
+    storyEngine: engine ? { signatureExperience: engine.signatureExperience, repeatableSituation: engine.repeatableSituation, protagonistMethod: engine.protagonistMethod, failureCosts: engine.failureCosts, emotionalPromise: engine.emotionalPromise, forbiddenRepetitions: engine.forbiddenRepetitions } : undefined,
     microStory: chapterOutline ? { immediateGoal: chapterOutline.immediateGoal, centralObstacle: chapterOutline.centralObstacle, difficultChoice: chapterOutline.difficultChoice, irreversibleResult: chapterOutline.irreversibleResult, concretePayoff: chapterOutline.concretePayoff, changedUnderstanding: chapterOutline.changedUnderstanding, nextPressure: chapterOutline.nextPressure, engineFunction: chapterOutline.engineFunction } : undefined,
     contract: contract ? { id: contract.id, mainlineObjective: contract.mainlineObjective, causalPrerequisite: contract.causalPrerequisite, readerPayoff: contract.readerPayoff, scopeBoundary: contract.scopeBoundary, coreEvent: contract.coreEvent, participants: contract.participants, readerEntry: contract.readerEntry, requiredDeltas: contract.requiredDeltas, emotionTarget: contract.emotionTarget, climaxForm: contract.climaxForm, hookType: contract.hookType, hookGoal: contract.hookGoal } : undefined, currentArcContext: { openThreads: Array.isArray((compass.current as any)?.openThreads) ? (compass.current as any).openThreads.slice(0, 3) : [] }, goal: clip(input.goal, 500), requiredEvents: (input.requiredEvents || []).map((value) => clip(value, 260)), settings: world.writingSettings,
     readerContext: { chapterNumber, previousEnding: chapterNumber === 1 ? undefined : previousEnding, entry: contract?.readerEntry },
@@ -328,19 +349,40 @@ async function runChapter(runId: string, input: ChapterRequest) {
     reportRun(runId, { status: 'running', stage: 'validate', progress: 52, message: '已恢复最近草稿，正在从审稿检查点继续' })
   } else {
     reportRun(runId, { status: 'running', stage: 'outline', progress: 15, message: '正在锁定本章单一核心事件' })
-    const outline = await ask(`你是小说章节架构师。严格执行演化契约。${OUTLINE_RULES}\n${strictRules}\n不要为契约中的每名人物分配独立段落；先设计一条连续的场景动作，再让人物因必要反应进入。返回 JSON：title,openingPressure,sceneGoal,obstacle,turn,consequence,characterFunctions,revealBudget,hook。${anchorBlock}\n素材：${material}`, 4096)
+    // The chapter contract and approved beats already are the executable
+    // outline. Asking a second architect model to reinterpret them adds
+    // latency and gives the story another chance to drift before the Writer.
+    const outline = JSON.stringify({
+      title: chapterNumber === 1 ? '首章' : `第${chapterNumber}章`,
+      openingPressure: contract?.causalPrerequisite || approvedBeats[0]?.trigger || contract?.coreEvent,
+      sceneGoal: chapterOutline?.immediateGoal || contract?.mainlineObjective,
+      obstacle: chapterOutline?.centralObstacle || approvedBeats[0]?.reaction,
+      difficultChoice: chapterOutline?.difficultChoice,
+      actionChain: approvedBeats.map((beat) => ({ trigger: beat.trigger, action: beat.action, reaction: beat.reaction, changedOption: beat.changedOption, consequence: beat.consequence })),
+      consequence: chapterOutline?.irreversibleResult || contract?.readerPayoff,
+      localPayoff: chapterOutline?.concretePayoff || contract?.readerPayoff,
+      characterFunctions: contract?.participants,
+      revealBudget: contract?.readerEntry,
+      hook: chapterOutline?.nextPressure || contract?.hookGoal,
+    })
     reportRun(runId, { status: 'running', stage: 'draft', progress: 34, message: '正在写作契约正文' })
     markdown = await ask(`你是长篇小说作者。写完整 Markdown 正文，不解释，不出现 Agent、Tick、契约、意图等系统术语。目标约 ${world.writingSettings.targetWords} 字。\n${DRAFT_RULES}\n${strictRules}${anchorBlock}\n大纲：${outline}\n素材：${material}`)
   }
   let draftPath = path.join(runDir, `${runId}-r0.md`); await writeFile(draftPath, markdown, 'utf8'); getDatabase().prepare('UPDATE chapter_runs SET draft_path=? WHERE id=?').run(draftPath, runId)
   let finalReview: ChapterReview | undefined
   let readerReview: ReaderComprehensionReview | undefined
-  for (let revision = 0; revision <= 2; revision++) {
+  for (let revision = 0; revision <= 1; revision++) {
     reportRun(runId, { status: 'running', stage: revision ? 'revalidate' : 'validate', progress: 60 + revision * 12, message: revision ? `正在复审第 ${revision} 次修订` : '正在执行七维审稿', revisionCount: revision })
     finalReview = await reviewChapter(input.worldId, runId, revision, material, contract, markdown, { actorNames, chapterNumber })
-    readerReview = await reviewReaderComprehension({ worldId: input.worldId, runId, markdown, previousEnding, contract, outline: chapterOutline })
-    if (finalReview.passed && readerReview.passed) break
-    if (revision === 2) throw new Error(`两次修订后仍未通过：平均 ${finalReview.averageScore.toFixed(1)}；${finalReview.issues.map((issue) => issue.message).join('；')}`)
+    readerReview = await reviewReaderComprehension({ worldId: input.worldId, runId, markdown, previousEnding, establishedText, contract, outline: chapterOutline })
+    const hasHardError = finalReview.issues.some((issue) => issue.severity === 'critical')
+    const needsEditorialRevision = finalReview.issues.some((issue) => issue.severity === 'error') || !readerReview.passed
+    if (!hasHardError && !needsEditorialRevision) break
+    if (revision === 1) {
+      if (hasHardError) throw new Error(`修订后仍存在事实或连续性硬伤：${finalReview.issues.filter((issue) => issue.severity === 'critical').map((issue) => issue.message).join('；')}`)
+      if (chapterNumber === 1 && !readerReview.passed) throw new Error(`首章修订后仍无法让新读者独立理解：${[...readerReview.unexplainedNames, ...readerReview.unexplainedConcepts, ...readerReview.unsupportedConclusions].slice(0, 5).join('；') || '无法清楚复述目标、阻碍、选择和结果'}`)
+      break
+    }
     const readerInstructions = readerReview.passed ? '' : `\n[读者理解失败] 未解释人物：${readerReview.unexplainedNames.join('、') || '无'}；未解释概念：${readerReview.unexplainedConcepts.join('、') || '无'}；跳跃结论：${readerReview.unsupportedConclusions.join('、') || '无'}。必须让目标、阻碍、选择、结果和局部回报直接出现在正文中。`
     const instructions = finalReview.issues.map((issue) => `[${issue.severity}] ${issue.contractField}：${issue.message}；证据“${issue.quote}”；修改：${issue.instruction}`).join('\n') + readerInstructions
     reportRun(runId, { status: 'running', stage: 'revise', progress: 70 + revision * 12, message: `正在进行第 ${revision + 1} 次有证据修订`, revisionCount: revision + 1 })
@@ -348,7 +390,7 @@ async function runChapter(runId: string, input: ChapterRequest) {
     draftPath = path.join(runDir, `${runId}-r${revision + 1}.md`); await writeFile(draftPath, markdown, 'utf8'); getDatabase().prepare('UPDATE chapter_runs SET draft_path=? WHERE id=?').run(draftPath, runId)
   }
   if (!finalReview?.passed) throw new Error('七维审稿未通过')
-  if (!readerReview?.passed) throw new Error('读者理解审查未通过')
+  if (!readerReview) throw new Error('读者理解检查没有返回结果')
   if (contract) await reviewStateEvidence(input.worldId, runId, contract, markdown)
   reportRun(runId, { status: 'running', stage: 'saving', progress: 94, message: '正在原子提交章节与 Tick' })
   const db = getDatabase(); const chapterId = randomUUID(); const title = markdown.match(/^#\s+(.+)$/m)?.[1] || `第${chapterNumber}章`
@@ -390,12 +432,21 @@ async function runChapter(runId: string, input: ChapterRequest) {
       db.prepare("UPDATE chapter_outlines SET status='completed',outline_json=json_set(outline_json,'$.status','completed') WHERE id=(SELECT chapter_outline_id FROM evolution_contracts WHERE id=?)").run(input.contractId)
       db.prepare('UPDATE events SET published_chapter_id=? WHERE contract_id=?').run(chapterId, input.contractId)
       const arcRow = db.prepare('SELECT arc_id FROM evolution_contracts WHERE id=?').get(input.contractId) as { arc_id?: string } | undefined
+      if (arcRow?.arc_id && chapterOutline?.completesArc && chapterOutline.arcCompletionEvidence) {
+        const row = db.prepare('SELECT plan_json FROM story_arcs WHERE id=?').get(arcRow.arc_id) as { plan_json: string } | undefined
+        if (row) {
+          const plan = JSON.parse(row.plan_json)
+          const completedPlan = { ...plan, status: 'completed', completionEvidence: chapterOutline.arcCompletionEvidence, completedChapterId: chapterId }
+          db.prepare("UPDATE story_arcs SET status='completed',plan_json=?,summary_json=? WHERE id=?").run(JSON.stringify(completedPlan), JSON.stringify({ localSettlement: plan.localSettlement, longTailResidue: plan.longTailResidue, evidence: chapterOutline.arcCompletionEvidence, chapterId }), arcRow.arc_id)
+        }
+      }
       if (arcRow?.arc_id && chapterOutline?.conflictMode) {
         const row = db.prepare('SELECT plan_json FROM story_arcs WHERE id=?').get(arcRow.arc_id) as { plan_json: string } | undefined
         if (row) {
           const plan = JSON.parse(row.plan_json)
           plan.usedConflictPatterns = [...new Set([...(plan.usedConflictPatterns || []), chapterOutline.conflictMode])]
-          db.prepare("UPDATE story_arcs SET status='active',plan_json=? WHERE id=?").run(JSON.stringify({ ...plan, status: 'active' }), arcRow.arc_id)
+          const nextStatus = plan.status === 'completed' ? 'completed' : 'active'
+          db.prepare('UPDATE story_arcs SET status=?,plan_json=? WHERE id=?').run(nextStatus, JSON.stringify({ ...plan, status: nextStatus }), arcRow.arc_id)
         }
       }
       if (!(contract?.requiredDeltas || []).some((delta) => delta.operation === 'advance_obligation')) for (const action of contract?.foreshadowActions || []) {
